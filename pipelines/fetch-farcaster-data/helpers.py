@@ -1,14 +1,16 @@
 from datetime import datetime, timezone, timedelta
 import json
+import logging
 import time
 import requests as r
 from requests import RequestException
 from botocore.exceptions import ClientError
 
 
-def convert_timestamp(timestamp, epoch):
-    """Converts Farcaster Hub Timestamp to UTC datetime"""
-    return epoch + timedelta(seconds=int(timestamp))
+
+# def convert_timestamp(timestamp, epoch):
+#     """Converts Farcaster Hub Timestamp to UTC datetime"""
+#     return epoch + timedelta(seconds=int(timestamp))
 
 def save_data(s3_client, bucket_name, key, data, logger):
     """Saves data to S3"""
@@ -42,7 +44,7 @@ def load_metadata(s3_client, bucket_name, logger):
     try:
         obj = s3_client.get_object(Bucket=bucket_name, Key='metadata.json')
         metadata = json.loads(obj['Body'].read().decode('utf-8'))
-        logger.info("Metadata loaded.")
+        logger.info("Metgadata loaded.")
         return metadata
     except s3_client.exceptions.NoSuchKey:
         logger.info("No metadata found. Starting fresh.")
@@ -51,15 +53,18 @@ def load_metadata(s3_client, bucket_name, logger):
         logger.error(f"Failed to load metadata: {e}")
         return {}
 
-def query_neynar_hub(base_url, endpoint, headers, params, convert_timestamp_func, epoch, logger):
-    """Queries the Neynar Hub API and retrieves all messages"""
+def query_neynar_hub(endpoint, params=None):
+    base_url = "https://hub-api.neynar.com/v1/"
+    headers = {
+        "Content-Type": "application/json"
+    }
     url = f"{base_url}{endpoint}"
     params = params or {}
-    params["page_size"] = 1000
-    
+    params['pageSize'] = 1000
+
     all_messages = []
     max_retries = 3
-    retry_delay = 1 
+    retry_delay = 1
 
     while True:
         for attempt in range(max_retries):
@@ -67,31 +72,28 @@ def query_neynar_hub(base_url, endpoint, headers, params, convert_timestamp_func
                 time.sleep(0.1)
                 response = r.get(url, headers=headers, params=params)
                 response.raise_for_status()
-                hub_data = response.json()
-
-                if "messages" in hub_data:
-                    for message in hub_data["messages"]:
-                        if 'timestamp' in message.get('data', {}):
-                            message['data']['timestamp'] = convert_timestamp_func(
-                                message['data']['timestamp'], epoch
-                            ).isoformat()
-                    all_messages.extend(hub_data['messages'])
-                    logger.info(f"Retrieved {len(all_messages)} messages total...")
+                data = response.json()
                 
-                if 'nextPageToken' in hub_data and hub_data['nextPageToken']:
-                    params['pageToken'] = hub_data['nextPageToken']
+                if 'messages' in data:
+                    for message in data['messages']:
+                        if 'timestamp' in message.get('data', {}):
+                            all_messages.extend(data['messages'])
+                            print(f"Retrieved {len(all_messages)} messages total...")
+                
+                if 'nextPageToken' in data and data['nextPageToken']:
+                    params['pageToken'] = data['nextPageToken']
                     break
                 else:
                     return all_messages
+                
             except RequestException as e:
                 if attempt == max_retries - 1:
-                    logger.error(f"Failed after {max_retries} attempts. Error: {e}")
+                    print(f"Failed after {max_retries} attempts. Error: {e}")
                     return all_messages
                 else:
-                    logger.warning(f"Attempt {attempt + 1} failed. Retrying in {retry_delay} seconds...")
+                    print(f"Attempt {attempt + 1} failed. Retrying in {retry_delay} seconds...")
                     time.sleep(retry_delay)
                     retry_delay *= 2
-
 
 def query_neynar_api(endpoint, params, headers):
     base_url = "https://api.neynar.com/v2/farcaster/"
