@@ -46,21 +46,81 @@ class FetchFarcasterHubData:
             'accept': 'application/json',
             'api_key': self.NEYNAR_API_KEY
         }
-        
-        url = f"https://api.neynar.com/v2/farcaster/channel/search?q={channel_name}&limit=20"
-
+        params = {
+            'id': channel_name
+        }
+        endpoint = 'channel'
         try:
-            response = r.get(url, headers=headers)
-            response.raise_for_status()  # Raises an HTTPError for bad responses
-            return response.json()
+            channel_metadata = helpers.query_neynar_api(endpoint, params, headers) 
+            return channel_metadata
         except r.RequestException as e:
             self.logger.error(f"Error fetching channel metadata: {e}")
             return None
         
+    def get_channel_members(self, channel_id):
+        headers = {
+            'accept': 'application/json',
+            'api_key': self.NEYNAR_API_KEY
+        }
+        endpoint = 'channel/member/list'
+        params = {
+            'channel_id': channel_id,
+            'limit': 100
+        }
+        try:
+            channel_members = helpers.query_neynar_api(endpoint, params, headers) 
+            return channel_members
+        except r.RequestException as e:
+            self.logger.error(f"Error fetching channel metadata: {e}")
+            return None
+        
+    def get_channel_casts(self, channel_id):
+        endpoint = 'feed/channels'
+        headers = {
+            'accept': 'application/json',
+            'api_key': self.NEYNAR_API_KEY
+        }
+        params = {
+            'channel_ids': channel_id,
+            'with_replies': False, 
+            'limit': 100
+        }
+        try:
+            channel_casts = helpers.query_neynar_api(endpoint, params, headers)
+            return channel_casts 
+        except r.RequestException as e:
+            self.logger.error(f"Error fetching channel casts: {e}")
+            return None 
+
+
+
+    ### get_channel_members
+        ### metadata
+        ### following
+        ### casts (ideally casts in channel?)
+        ### recasts
+        ### likes
+
+    ### get_user_following
+
+    ### get
+
+    ### 
+    ### add filters
+    #### def get_all_data()
+
+    ### iterate
+    ### channel data
+    ### users data
+        ## casts
+        ## mutual followers/following
+
+        
     def run(self):
-        channel_data = self.get_channel_metadata('optimism')
-        self.data['channel_metadata'] = channel_data['channels'][0]
-        print(self.data)
+        # channel_data = self.get_channel_metadata('optimism')
+        # channel_members = self.get_channel_members('optimism')
+        channel_casts = self.get_channel_casts('optimism')
+        print(len(channel_casts))
 
 if __name__ == "__main__":
     fethcer = FetchFarcasterHubData()

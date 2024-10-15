@@ -5,6 +5,7 @@ import requests as r
 from requests import RequestException
 from botocore.exceptions import ClientError
 
+
 def convert_timestamp(timestamp, epoch):
     """Converts Farcaster Hub Timestamp to UTC datetime"""
     return epoch + timedelta(seconds=int(timestamp))
@@ -92,28 +93,33 @@ def query_neynar_hub(base_url, endpoint, headers, params, convert_timestamp_func
                     retry_delay *= 2
 
 
-def query_neynar_api(endpoint, params=None, headers=None, timeout=10, sleep_time=0.1):
-    base_url = "https://api.neynar.com/v2/farcaster"
-    if params is None:
-        params = {}
-    all_data = []
-    while True:
-        url = f"{base_url}{endpoint}"
-        try:
-            response = r.get(url, headers=headers, params=params, timeout=timeout)
+def query_neynar_api(endpoint, params, headers):
+    base_url = "https://api.neynar.com/v2/farcaster/"
+    url = f"{base_url}{endpoint}"
+    all_items = []
+
+    counter = 0
+    
+    try:
+        while True:
+            print(f"Collecting data, on iteration {counter}...")
+            response = r.get(url, headers=headers, params=params)
             response.raise_for_status()
             data = response.json()
-            all_data.extend(data.get('members', []))
-            cursor = data.get('nextPageToken')
-            if not cursor:
+            
+            # Get the first key in the data dictionary
+            first_key = next(iter(data))
+            # Extend all_items with the list under the first key
+            all_items.extend(data[first_key])
+            
+            if 'next' in data and 'cursor' in data['next']:
+                params['cursor'] = data['next']['cursor']
+                counter += 1
+            else:
                 break
-            params['cursor'] = cursor
-            time.sleep(sleep_time)
-        except r.RequestException:
-            break
-    return all_data
-
-
-
-
-
+    except r.RequestException as e:
+        print(f"Request failed: {e}")
+        if hasattr(e.response, 'status_code') and e.response.status_code == 400:
+            print(f"Bad request. Response content: {e.response.text}")
+    
+    return all_items
