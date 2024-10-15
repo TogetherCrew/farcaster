@@ -52,14 +52,15 @@ class FetchFarcasterHubData:
         try:
             response = r.get(url, headers=headers)
             response.raise_for_status()  # Raises an HTTPError for bad responses
-            print(response.text)
             return response.json()
         except r.RequestException as e:
             self.logger.error(f"Error fetching channel metadata: {e}")
             return None
         
     def run(self):
-        self.get_channel_metadata('optimism')
+        channel_data = self.get_channel_metadata('optimism')
+        self.data['channel_metadata'] = channel_data['channels'][0]
+        print(self.data)
 
 if __name__ == "__main__":
     fethcer = FetchFarcasterHubData()
