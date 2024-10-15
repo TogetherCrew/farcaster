@@ -20,6 +20,20 @@ def save_data(s3_client, bucket_name, key, data, logger):
 def save_metadata(s3_client, bucket_name, metadata, logger):
     """Saves metadata to S3"""
     metadata['last_run'] = datetime.utcnow().isoformat()
+    try:
+        s3_client.head_bucket(Bucket=bucket_name)
+    except ClientError as e:
+        if e.response['Error']['Code'] == '404':
+            logger.info(f"Bucket {bucket_name} does not exist. Creating...")
+            try:
+                s3_client.create_bucket(Bucket=bucket_name)
+                logger.info(f"Bucket {bucket_name} created successfully.")
+            except ClientError as create_error:
+                logger.error(f"Failed to create bucket: {create_error}")
+                return
+        else:
+            logger.error(f"Error checking bucket: {e}")
+            return
     save_data(s3_client, bucket_name, 'metadata.json', metadata, logger)
 
 def load_metadata(s3_client, bucket_name, logger):
