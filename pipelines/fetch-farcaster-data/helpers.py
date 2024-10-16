@@ -7,6 +7,7 @@ from requests import RequestException
 from botocore.exceptions import ClientError
 
 
+### ADD A TIMESTAMP/HASH/LIMIT LOGIC AND HTEN AN "EVERYTHING" OPTION.
 
 # def convert_timestamp(timestamp, epoch):
 #     """Converts Farcaster Hub Timestamp to UTC datetime"""
@@ -95,7 +96,7 @@ def query_neynar_hub(endpoint, params=None):
                     time.sleep(retry_delay)
                     retry_delay *= 2
 
-def query_neynar_api(endpoint, params, headers):
+def query_neynar_api(endpoint=None, params=None, headers=None, timestamp=None, timestamp_field='timestamp'):
     base_url = "https://api.neynar.com/v2/farcaster/"
     url = f"{base_url}{endpoint}"
     all_items = []
@@ -104,15 +105,31 @@ def query_neynar_api(endpoint, params, headers):
     
     try:
         while True:
-            print(f"Collecting data, on iteration {counter}...")
+            print(f"Collecting data from {endpoint}, on iteration {counter}...")
             response = r.get(url, headers=headers, params=params)
             response.raise_for_status()
             data = response.json()
             
-            # Get the first key in the data dictionary
             first_key = next(iter(data))
-            # Extend all_items with the list under the first key
-            all_items.extend(data[first_key])
+            new_items = data[first_key]
+            
+            if timestamp is not None:
+                for item in new_items:
+                    if timestamp_field in item:
+                        item_timestamp = parse_timestamp(item[timestamp_field])
+                        if item_timestamp <= timestamp:
+                            return all_items
+                    all_items.append(item)
+            else:
+                all_items.extend(new_items)
+            
+            print(len(all_items))
+            
+            # Print max timestamp for this iteration
+            if new_items:
+                max_timestamp = max(parse_timestamp(item.get(timestamp_field, '0')) for item in new_items)
+                human_readable_timestamp = datetime.fromtimestamp(max_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                print(f"Max timestamp for iteration {counter}: {human_readable_timestamp}")
             
             if 'next' in data and 'cursor' in data['next']:
                 params['cursor'] = data['next']['cursor']
@@ -125,3 +142,10 @@ def query_neynar_api(endpoint, params, headers):
             print(f"Bad request. Response content: {e.response.text}")
     
     return all_items
+
+def parse_timestamp(timestamp_str):
+    try:
+        return int(timestamp_str)
+    except ValueError:
+        # If it's not an integer, assume it's an ISO format string
+        return int(datetime.fromisoformat(timestamp_str.replace('Z', '+00:00')).timestamp())
