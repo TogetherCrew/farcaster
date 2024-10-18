@@ -23,43 +23,23 @@ class FetchFarcasterHubData:
         self.AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
         self.BUCKET_NAME = os.getenv('BUCKET_NAME')
         self.data = {}
-        self.manual_cutoff = 7
+        self.runtime = datetime.now()
+        self.manual_cutoff = os.getenv('CUTOFF')
+        self.channel_fids = json.loads(os.getenv('FIDS', '[]'))
+        print(type(self.channel_fids))
         
-        if not self.AWS_ACCESS_KEY_ID or not self.AWS_SECRET_ACCESS_KEY:
-            raise ValueError("AWS credentials are missing. Please check your environment variables.")
-
         self.s3_client = boto3.client(
             's3', 
             region_name='us-east-1',
             aws_access_key_id=self.AWS_ACCESS_KEY_ID, 
             aws_secret_access_key=self.AWS_SECRET_ACCESS_KEY
         )
+
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
         self.metadata = helpers.load_metadata(self.s3_client, self.BUCKET_NAME, self.logger)
         self.last_run = self.metadata.get('last_run', None)
 
-        self.channels = ['optimism']
-
-    def get_channel_members(self, channel_id):
-        headers = {
-            'accept': 'application/json',
-            'api_key': self.NEYNAR_API_KEY
-        }
-
-        endpoint = 'channel/member/list'
-
-        params = {
-            'channel_id': channel_id,
-            'limit': 100
-        }
-        print(f"Fetching members for channel_id: {channel_id}")
-        try:
-            channel_members = helpers.query_neynar_api(endpoint, params, headers)
-            return channel_members
-        except r.RequestException as e:
-            self.logger.error(f"Error fetching channel members: {e}")
-            return None
         
     def get_channel_followers(self, channel_id):
         print(f"Fetching followers for channel {channel_id}...")
@@ -117,8 +97,6 @@ class FetchFarcasterHubData:
         followers_ids = self.get_all_fids_channel_followers(followers)
         return list(set(members_ids + followers_ids))
 
-
-
     
     def get_all_fids_channel_followers(self, channel_followers):
         fids = set()
@@ -142,8 +120,6 @@ class FetchFarcasterHubData:
             self.logger.error(f"Error fetching channel metadata: {e}")
             return None
         
-        # Get channel followers
-
     def get_user_casts_in_channel(self, fid, channel):
         self.logger.info(f"Collecting casts for user {fid} in channel {channel}.....")
         endpoint = "feed/user/casts"
@@ -162,47 +138,33 @@ class FetchFarcasterHubData:
             self.logger.error(f"Error fetching casts in channel {channel} for user: {e}")
             return None
         
-    def get_all_user_channels(self, fid):
-        self.logger.info(f"Collecting additional channels for user {fid}...")
-        endpoint = "user/channels"
-        headers = {
-            'accept': 'application/json',
-            'api_key': self.NEYNAR_API_KEY
-        }
-        params = {
-            'fid': fid, 
-            'limit': 100,
-        }
-        try:
-            additional_channels = helpers.query_neynar_api(endpoint, params, headers)
-            return additional_channels
-        except Exception as e:
-            self.logger.error(f"Error fetching additional channels for user {fid}")
-            return None 
+    def get_all_user_channels(self, fids):
+        for fid in fids:
+            self.logger.info(f"Collecting additional channels for user {fid}...")
+            endpoint = "user/channels"
+            headers = {
+                'accept': 'application/json',
+                'api_key': self.NEYNAR_API_KEY
+            }
+            params = {
+                'fid': fid, 
+                'limit': 100,
+            }
+            try:
+                additional_channels = helpers.query_neynar_api(endpoint, params, headers)
+                return additional_channels
+            except Exception as e:
+                self.logger.error(f"Error fetching additional channels for user {fid}")
+                return None 
         
 
 
 
         
     def run(self):
-        # followers = self.get_channel_followers('optimism')
-        # members = self.get_all_fids_channel_members('optimism')
-        # all_channel_fids = self.get_all_channel_fids(followers, members)
-        # channel_member_casts = self.get_user_casts_in_channel('195960', 'optimism')
-        all_user_channels = self.get_all_user_channels('190000')
-
-        
-
-
-# new strategy...
-# - capture timestamp and convert it
-# - check metadata
-# - get all casts, recasts, etc for all users as starting point (for profiling)
-#     - Param for up to, if null, all 
-#         - change the run function to accomodate this logic 
-# - If no metadata default to config, if metadata, adjust timestamp to config
-
-
+        for channel_id in self.channel_fids:
+            members = self.get_channel_members(channel_id)
+            self.data['members'] = members 
 
 if __name__ == "__main__":
     fethcer = FetchFarcasterHubData()
