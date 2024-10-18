@@ -112,12 +112,9 @@ class FetchFarcasterHubData:
         return list(fids)
         
 
-    def get_all_channel_fids(self, channel_id):
-        members = self.get_channel_members(channel_id)
-        followers = self.get_channel_followers(channel_id)
+    def get_all_channel_fids(self, followers, members):
         members_ids = self.get_all_fids_channel_members(members)
         followers_ids = self.get_all_fids_channel_followers(followers)
-
         return list(set(members_ids + followers_ids))
 
 
@@ -147,31 +144,31 @@ class FetchFarcasterHubData:
         
         # Get channel followers
 
-    def get_user_casts(self, fid):
-        self.logger.info(f"Collecting casts for user {fid}.....")
-        endpoint = "castsByFid"
-        params = {'fid': fid, 'api_key': self.NEYNAR_API_KEY}
+    def get_user_casts_in_channel(self, fid, channel):
+        self.logger.info(f"Collecting casts for user {fid} in channel {channel}.....")
+        endpoint = "feed/user/casts"
+        params = {'fid': fid, 'api_key': self.NEYNAR_API_KEY, 'limit': 150,
+                  'channel_fid': channel}
+        headers = {
+            'accept': 'application/json',
+            'api_key': self.NEYNAR_API_KEY
+        }
         try:
-            messages = helpers.query_neynar_hub(endpoint=endpoint, params=params)
-            return messages
+            casts_in_channel = helpers.query_neynar_api(endpoint, params, headers)
+            return casts_in_channel
         except Exception as e:
-            self.logger.error(f"Error fetching casts for user: {e}")
+            self.logger.error(f"Error fetching casts in channel {channel} for user: {e}")
             return None
+        
+
+
         
     def run(self):
         # followers = self.get_channel_followers('optimism')
-        # follower_ids = self.get_all_fids_channel_followers(followers)
         # members = self.get_all_fids_channel_members('optimism')
-        # members = self.get_channel_members('optimism')
-        # followers = self.get_channel_followers('optimism')
-        all_channel_fids = self.get_all_channel_fids('optimism')
-        print(len(all_channel_fids))
-        # print(members[0])
-        # members_fids = self.get_all_fids_channel_members(members)
-        # print(members_fids[0:5])
-        # print(len(members_fids))
-        # channel_metadata = self.get_channel_metadata('optimism')
-        # channel_fids = self.get_all_channel_fids('optimism')
+        # all_channel_fids = self.get_all_channel_fids(followers, members)
+        channel_member_casts = self.get_user_casts_in_channel('195960', 'optimism')
+        print(channel_member_casts[0:5])
 
         
 
