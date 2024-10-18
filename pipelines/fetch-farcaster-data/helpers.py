@@ -107,11 +107,9 @@ def query_neynar_api(endpoint, params, headers):
 
     while True:
         try:
-            print(f"Params keys: {params.keys()}")
             response = r.get(url, headers=headers, params=current_params)
             response.raise_for_status()
             data = response.json()
-            print(f"Response keys: {data.keys()}")
 
             # Extract data from the first response key
             first_key = next(iter(data), None)
@@ -123,7 +121,6 @@ def query_neynar_api(endpoint, params, headers):
             if isinstance(extracted_data, list):
                 all_data.extend(extracted_data)
             else:
-                print(f"'{first_key}' is not a list. Exiting loop.")
                 break
 
             # Retrieve the cursor for the next page
@@ -131,7 +128,6 @@ def query_neynar_api(endpoint, params, headers):
             cursor = next_info.get('cursor')
 
             if not cursor:
-                print("No cursor found. Ending pagination.")
                 break
 
             # Add 'cursor' to current_params for the next request

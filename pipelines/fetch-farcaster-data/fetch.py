@@ -42,6 +42,44 @@ class FetchFarcasterHubData:
         self.channels = ['optimism']
 
     def get_channel_members(self, channel_id):
+        headers = {
+            'accept': 'application/json',
+            'api_key': self.NEYNAR_API_KEY
+        }
+
+        endpoint = 'channel/member/list'
+
+        params = {
+            'channel_id': channel_id,
+            'limit': 100
+        }
+        print(f"Fetching members for channel_id: {channel_id}")
+        try:
+            channel_members = helpers.query_neynar_api(endpoint, params, headers)
+            return channel_members
+        except r.RequestException as e:
+            self.logger.error(f"Error fetching channel members: {e}")
+            return None
+        
+    def get_channel_followers(self, channel_id):
+        print(f"Fetching followers for channel {channel_id}...")
+        headers = {
+            'accept': 'application/json',
+            'api_key': self.NEYNAR_API_KEY
+        }
+        endpoint = 'channel/followers'
+        params = {
+            'id': channel_id,
+            'limit': 1000
+        }
+        try:
+            channel_followers = helpers.query_neynar_api(endpoint, params, headers)
+            return channel_followers
+        except r.RequestException as e:
+            self.logger.error(f"Error fetching channel followers: {e}")
+
+
+    def get_channel_members(self, channel_id):
         if not isinstance(channel_id, (str, int)):
             self.logger.error(f"Invalid channel_id type: {type(channel_id)}. Expected str or int.")
             return None
@@ -65,30 +103,22 @@ class FetchFarcasterHubData:
         except r.RequestException as e:
             self.logger.error(f"Error fetching channel members: {e}")
             return None
+
+
+    def get_all_fids_channel_members(self, channel_members):
+        fids = set()
+        for member in channel_members:
+            fids.add(member.get('user').get('fid'))
+        return list(fids)
         
-    def get_all_fids_channel_members(self, channel_id):
-        headers = {
-            'accept': 'application/json',
-            'api_key': self.NEYNAR_API_KEY
-        }
-        endpoint = 'channel/member'
-        params = {
-            'channel_id': channel_id,
-            'limit': 100
-        }
-        channel_members = helpers.query_neynar_api(endpoint, params, headers)
-        return channel_members
-    
 
     def get_all_channel_fids(self, channel_id):
         members = self.get_channel_members(channel_id)
         followers = self.get_channel_followers(channel_id)
-        print(followers)
-
         members_ids = self.get_all_fids_channel_members(members)
         followers_ids = self.get_all_fids_channel_followers(followers)
-        print(len(members_ids))
-        print(len(followers_ids))
+
+        return list(set(members_ids + followers_ids))
 
 
 
@@ -132,8 +162,13 @@ class FetchFarcasterHubData:
         # followers = self.get_channel_followers('optimism')
         # follower_ids = self.get_all_fids_channel_followers(followers)
         # members = self.get_all_fids_channel_members('optimism')
-        members = self.get_channel_members('optimism')
+        # members = self.get_channel_members('optimism')
+        # followers = self.get_channel_followers('optimism')
+        all_channel_fids = self.get_all_channel_fids('optimism')
+        print(len(all_channel_fids))
+        # print(members[0])
         # members_fids = self.get_all_fids_channel_members(members)
+        # print(members_fids[0:5])
         # print(len(members_fids))
         # channel_metadata = self.get_channel_metadata('optimism')
         # channel_fids = self.get_all_channel_fids('optimism')
