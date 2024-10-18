@@ -147,7 +147,9 @@ class FetchFarcasterHubData:
     def get_user_casts_in_channel(self, fid, channel):
         self.logger.info(f"Collecting casts for user {fid} in channel {channel}.....")
         endpoint = "feed/user/casts"
-        params = {'fid': fid, 'api_key': self.NEYNAR_API_KEY, 'limit': 150,
+        params = {'fid': fid, 
+                  'api_key': self.NEYNAR_API_KEY,
+                  'limit': 150,
                   'channel_fid': channel}
         headers = {
             'accept': 'application/json',
@@ -160,6 +162,25 @@ class FetchFarcasterHubData:
             self.logger.error(f"Error fetching casts in channel {channel} for user: {e}")
             return None
         
+    def get_all_user_channels(self, fid):
+        self.logger.info(f"Collecting additional channels for user {fid}...")
+        endpoint = "user/channels"
+        headers = {
+            'accept': 'application/json',
+            'api_key': self.NEYNAR_API_KEY
+        }
+        params = {
+            'fid': fid, 
+            'limit': 100,
+        }
+        try:
+            additional_channels = helpers.query_neynar_api(endpoint, params, headers)
+            return additional_channels
+        except Exception as e:
+            self.logger.error(f"Error fetching additional channels for user {fid}")
+            return None 
+        
+
 
 
         
@@ -167,8 +188,8 @@ class FetchFarcasterHubData:
         # followers = self.get_channel_followers('optimism')
         # members = self.get_all_fids_channel_members('optimism')
         # all_channel_fids = self.get_all_channel_fids(followers, members)
-        channel_member_casts = self.get_user_casts_in_channel('195960', 'optimism')
-        print(channel_member_casts[0:5])
+        # channel_member_casts = self.get_user_casts_in_channel('195960', 'optimism')
+        all_user_channels = self.get_all_user_channels('190000')
 
         
 
