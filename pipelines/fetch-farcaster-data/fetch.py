@@ -23,7 +23,7 @@ class FetchFarcasterHubData:
         self.AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
         self.BUCKET_NAME = os.getenv('BUCKET_NAME')
         self.data = {}
-        self.manual_cutoff = 7 
+        self.manual_cutoff = 7
         
         if not self.AWS_ACCESS_KEY_ID or not self.AWS_SECRET_ACCESS_KEY:
             raise ValueError("AWS credentials are missing. Please check your environment variables.")
@@ -41,42 +41,64 @@ class FetchFarcasterHubData:
 
         self.channels = ['optimism']
 
+    def get_channel_members(self, channel_id):
+        if not isinstance(channel_id, (str, int)):
+            self.logger.error(f"Invalid channel_id type: {type(channel_id)}. Expected str or int.")
+            return None
 
-    def convert_manual_cutoff_timestamp(self, manual_cutoff=None):
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.manual_cutoff)
-        return int((cutoff_date - self.FARCASTER_EPOCH).total_seconds())
+        headers = {
+            'accept': 'application/json',
+            'api_key': self.NEYNAR_API_KEY
+        }
 
-    def get_all_fids_channel_casts(self, casts_data):
-        fids = set()
-        for item in casts_data:
-            if 'data' in item:
-                if 'fid' in item['data']:
-                    fids.add(item['data']['fid'])
-                if 'parent' in item['data'] and 'fid' in item['data']['parent']:
-                    fids.add(item['data']['parent']['fid'])
-        return list(fids)
-    
-    def get_all_fids_channel_members(self, channel_members):
-        fids = set()
-        for member in channel_members:
-            if 'user' in member and 'fid' in member['user']:
-                fids.add(member['user']['fid'])
-        return list(fids)
-    
-    def get_all_fids_channel_followers(self, followers_data):
-        fids = set()
-        for follower in followers_data:
-            if 'user' in follower and 'fid' in follower['user']:
-                fids.add(follower['user']['fid'])
-        return list(fids)
-    
+        endpoint = 'channel/member/list'
 
-    def collect_all_user_fids(self, channel_members, channel_followers, channel_casters):
-        channel_member_fids = self.get_all_fids_channel_members(channel_members)
-        channel_follower_fids = self.get_all_fids_channel_followers(channel_followers)
-        channel_casts_fids = self.get_all_fids_channel_casts(channel_casters)
-        return list(set(channel_member_fids + channel_follower_fids + channel_casts_fids))
+        params = {
+            'channel_id': channel_id,
+            'limit': 100
+        }
+
+        print(f"Fetching members for channel_id: {channel_id}")
+        try:
+            channel_members = helpers.query_neynar_api(endpoint, params, headers)
+            return channel_members
+        except r.RequestException as e:
+            self.logger.error(f"Error fetching channel members: {e}")
+            return None
         
+    def get_all_fids_channel_members(self, channel_id):
+        headers = {
+            'accept': 'application/json',
+            'api_key': self.NEYNAR_API_KEY
+        }
+        endpoint = 'channel/member'
+        params = {
+            'channel_id': channel_id,
+            'limit': 100
+        }
+        channel_members = helpers.query_neynar_api(endpoint, params, headers)
+        return channel_members
+    
+
+    def get_all_channel_fids(self, channel_id):
+        members = self.get_channel_members(channel_id)
+        followers = self.get_channel_followers(channel_id)
+        print(followers)
+
+        members_ids = self.get_all_fids_channel_members(members)
+        followers_ids = self.get_all_fids_channel_followers(followers)
+        print(len(members_ids))
+        print(len(followers_ids))
+
+
+
+    
+    def get_all_fids_channel_followers(self, channel_followers):
+        fids = set()
+        for follower in channel_followers:
+            fids.add(follower.get('fid'))
+        return list(fids)
+    
     def get_channel_metadata(self, channel_name):
         headers = {
             'accept': 'application/json',
@@ -93,39 +115,7 @@ class FetchFarcasterHubData:
             self.logger.error(f"Error fetching channel metadata: {e}")
             return None
         
-    def get_channel_members(self, channel_id):
-        headers = {
-            'accept': 'application/json',
-            'api_key': self.NEYNAR_API_KEY
-        }
-        endpoint = 'channel/member/list'
-        params = {
-            'channel_id': channel_id,
-            'limit': 100
-        }
-        try:
-            channel_members = helpers.query_neynar_api(endpoint, params, headers) 
-            return channel_members
-        except r.RequestException as e:
-            self.logger.error(f"Error fetching channel metadata: {e}")
-            return None
-
-    def get_channel_followers(self, channel_id):
-        headers = {
-            'accept': 'application/json',
-            'api_key': self.NEYNAR_API_KEY
-        }
-        endpoint = 'channel/followers'
-        params = {
-            'id': channel_id,
-            'limit': 1000
-        }
-        try:
-            channel_followers = helpers.query_neynar_api(endpoint, params, headers)
-            return channel_followers
-        except r.RequestException as e:
-            self.logger.error(f"Error fetching channel followers: {e}")
-
+        # Get channel followers
 
     def get_user_casts(self, fid):
         self.logger.info(f"Collecting casts for user {fid}.....")
@@ -138,17 +128,28 @@ class FetchFarcasterHubData:
             self.logger.error(f"Error fetching casts for user: {e}")
             return None
         
-
-new strategy...
-- capture timestamp and convert it
-- check metadata
-- get all casts, recasts, etc for all users as starting point (for profiling)
-    - Param for up to, if null, all 
-        - change the run function to accomodate this logic 
-- If no metadata default to config, if metadata, adjust timestamp to config
-
-
     def run(self):
+        # followers = self.get_channel_followers('optimism')
+        # follower_ids = self.get_all_fids_channel_followers(followers)
+        # members = self.get_all_fids_channel_members('optimism')
+        members = self.get_channel_members('optimism')
+        # members_fids = self.get_all_fids_channel_members(members)
+        # print(len(members_fids))
+        # channel_metadata = self.get_channel_metadata('optimism')
+        # channel_fids = self.get_all_channel_fids('optimism')
+
+        
+
+
+# new strategy...
+# - capture timestamp and convert it
+# - check metadata
+# - get all casts, recasts, etc for all users as starting point (for profiling)
+#     - Param for up to, if null, all 
+#         - change the run function to accomodate this logic 
+# - If no metadata default to config, if metadata, adjust timestamp to config
+
+
 
 if __name__ == "__main__":
     fethcer = FetchFarcasterHubData()

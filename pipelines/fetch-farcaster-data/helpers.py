@@ -53,7 +53,7 @@ def load_metadata(s3_client, bucket_name, logger):
     except ClientError as e:
         logger.error(f"Failed to load metadata: {e}")
         return {}
-
+    
 def query_neynar_hub(endpoint, params=None):
     base_url = "https://hub-api.neynar.com/v1/"
     headers = {
@@ -96,56 +96,55 @@ def query_neynar_hub(endpoint, params=None):
                     time.sleep(retry_delay)
                     retry_delay *= 2
 
-def query_neynar_api(endpoint=None, params=None, headers=None, timestamp=None, timestamp_field='timestamp'):
+
+def query_neynar_api(endpoint, params, headers):
     base_url = "https://api.neynar.com/v2/farcaster/"
     url = f"{base_url}{endpoint}"
-    all_items = []
+    all_data = []
 
-    counter = 0
-    
-    try:
-        while True:
-            print(f"Collecting data from {endpoint}, on iteration {counter}...")
-            response = r.get(url, headers=headers, params=params)
+    # Make a copy to avoid mutating the original params
+    current_params = params.copy()
+
+    while True:
+        try:
+            print(f"Params keys: {params.keys()}")
+            response = r.get(url, headers=headers, params=current_params)
             response.raise_for_status()
             data = response.json()
-            
-            first_key = next(iter(data))
-            new_items = data[first_key]
-            
-            if timestamp is not None:
-                for item in new_items:
-                    if timestamp_field in item:
-                        item_timestamp = parse_timestamp(item[timestamp_field])
-                        if item_timestamp <= timestamp:
-                            return all_items
-                    all_items.append(item)
-            else:
-                all_items.extend(new_items)
-            
-            print(len(all_items))
-            
-            # Print max timestamp for this iteration
-            if new_items:
-                max_timestamp = max(parse_timestamp(item.get(timestamp_field, '0')) for item in new_items)
-                human_readable_timestamp = datetime.fromtimestamp(max_timestamp).strftime('%Y-%m-%d %H:%M:%S')
-                print(f"Max timestamp for iteration {counter}: {human_readable_timestamp}")
-            
-            if 'next' in data and 'cursor' in data['next']:
-                params['cursor'] = data['next']['cursor']
-                counter += 1
-            else:
-                break
-    except r.RequestException as e:
-        print(f"Request failed: {e}")
-        if hasattr(e.response, 'status_code') and e.response.status_code == 400:
-            print(f"Bad request. Response content: {e.response.text}")
-    
-    return all_items
+            print(f"Response keys: {data.keys()}")
 
-def parse_timestamp(timestamp_str):
-    try:
-        return int(timestamp_str)
-    except ValueError:
-        # If it's not an integer, assume it's an ISO format string
-        return int(datetime.fromisoformat(timestamp_str.replace('Z', '+00:00')).timestamp())
+            # Extract data from the first response key
+            first_key = next(iter(data), None)
+            if first_key is None:
+                print("No data in response. Exiting loop.")
+                break
+
+            extracted_data = data.get(first_key, [])
+            if isinstance(extracted_data, list):
+                all_data.extend(extracted_data)
+            else:
+                print(f"'{first_key}' is not a list. Exiting loop.")
+                break
+
+            # Retrieve the cursor for the next page
+            next_info = data.get('next', {})
+            cursor = next_info.get('cursor')
+
+            if not cursor:
+                print("No cursor found. Ending pagination.")
+                break
+
+            # Add 'cursor' to current_params for the next request
+            current_params['cursor'] = cursor
+
+        except r.RequestException as e:
+            print(f"Request failed: {str(e)[:200]}")
+            if hasattr(e.response, 'status_code'):
+                if e.response.status_code == 400:
+                    print(f"Bad request. Response content: {e.response.text[:200]}")
+                elif e.response.status_code == 404:
+                    print("Endpoint not found. Exiting loop.")
+            break
+
+    print("Data collection completed successfully.")
+    return all_data
