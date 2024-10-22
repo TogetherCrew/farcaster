@@ -1,6 +1,9 @@
 import os
 import logging
 import time
+import re
+import math
+import sys
 from datetime import datetime
 from typing import Optional, Union, List, Dict, Any
 import pandas as pd
@@ -10,6 +13,7 @@ from functools import wraps
 import json
 import boto3
 from botocore.exceptions import ClientError
+from tqdm import tqdm
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +39,7 @@ def get_query_logging(function):
     return wrapper
 
 class Cypher:
+    # [Keep your existing Cypher class exactly as is]
     """Base class for Neo4j database operations"""
     def __init__(self, database: Optional[str] = None) -> None:
         load_dotenv()
@@ -101,15 +106,25 @@ class Cypher:
         return ""
 
 class Ingestor:
-    """Base class for data ingestion with S3 and Neo4j support"""
+    """Enhanced base class for data ingestion with S3 and Neo4j support"""
     def __init__(self, bucket_name: str):
         load_dotenv()
         
-        self.bucket_name = bucket_name
+        # Basic initialization
+        self.bucket_name = os.getenv("AWS_BUCKET_PREFIX", "") + bucket_name if not bucket_name.startswith("tc-") else bucket_name
         self.metadata_filename = "ingestor_metadata.json"
         self.runtime = datetime.now()
         
-        # Initialize S3 client with env variables
+        # S3 specific initialization
+        self.S3_max_size = 1000000000
+        self.data = {}
+        self.metadata = {}
+        self.scraper_data = {}
+        self.allow_override = os.getenv("ALLOW_OVERRIDE") == "1"
+        self.start_date = None
+        self.end_date = None
+        
+        # Initialize AWS clients
         self.AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
         self.AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
         
@@ -118,76 +133,149 @@ class Ingestor:
             
         self.s3_client = boto3.client(
             's3',
-            region_name='us-east-1',
+            region_name=os.getenv('AWS_DEFAULT_REGION', 'us-east-1'),
             aws_access_key_id=self.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=self.AWS_SECRET_ACCESS_KEY
         )
+        self.s3_resource = boto3.resource('s3')
+        self.bucket = self.create_or_get_bucket()
         
-        self.load_metadata()
+        # Load initial data
+        self.load_data()
         
         if not hasattr(self, 'cyphers'):
             raise NotImplementedError("Cyphers have not been instantiated to self.cyphers")
 
-    def load_metadata(self) -> None:
-        """Load metadata from S3"""
-        try:
-            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=self.metadata_filename)
-            self.metadata = json.loads(response['Body'].read().decode('utf-8'))
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchKey':
-                self.metadata = {}
-            else:
+    def configure_bucket(self):
+        """Configure bucket for public access and object ownership"""
+        self.s3_client.put_public_access_block(
+            Bucket=self.bucket_name,
+            PublicAccessBlockConfiguration={
+                'BlockPublicAcls': False,
+                'IgnorePublicAcls': False,
+                'BlockPublicPolicy': False,
+                'RestrictPublicBuckets': False
+            }
+        )
+        self.s3_client.put_bucket_ownership_controls(
+            Bucket=self.bucket_name,
+            OwnershipControls={
+                'Rules': [{'ObjectOwnership': 'ObjectWriter'}]
+            }
+        )
+
+    def create_or_get_bucket(self):
+        """Create or get existing S3 bucket"""
+        response = self.s3_client.list_buckets()
+        if self.bucket_name not in [el["Name"] for el in response["Buckets"]]:
+            try:
+                logging.warning(f"Bucket not found! Creating {self.bucket_name}")
+                location = {"LocationConstraint": os.getenv("AWS_DEFAULT_REGION", "us-east-1")}
+                self.s3_client.create_bucket(Bucket=self.bucket_name, CreateBucketConfiguration=location)
+                self.configure_bucket()
+            except ClientError as e:
+                logging.error(f"An error occurred during bucket creation: {e}")
                 raise
+        return self.s3_resource.Bucket(self.bucket_name)
 
-    def save_metadata(self) -> None:
-        """Save current metadata to S3"""
-        self.metadata["last_date_ingested"] = f"{self.runtime.year}-{self.runtime.month}-{self.runtime.day}"
-        self.save_json(self.metadata_filename, self.metadata)
+    def get_size(self, obj: Union[Dict, List], seen=None) -> int:
+        """Recursively calculate size of objects"""
+        size = sys.getsizeof(obj)
+        if seen is None:
+            seen = set()
+        obj_id = id(obj)
+        if obj_id in seen:
+            return 0
+        seen.add(obj_id)
+        if isinstance(obj, dict):
+            size += sum([self.get_size(v, seen) for v in obj.values()])
+            size += sum([self.get_size(k, seen) for k in obj.keys()])
+        elif hasattr(obj, '__dict__'):
+            size += self.get_size(obj.__dict__, seen)
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+            size += sum([self.get_size(i, seen) for i in obj])
+        return size
 
-    def save_json(self, filename: str, data: Dict) -> str:
-        """Save JSON data to S3 and return URL"""
-        try:
-            json_data = json.dumps(data)
-            self.s3_client.put_object(
-                Bucket=self.bucket_name,
-                Key=filename,
-                Body=json_data.encode('utf-8')
-            )
-            return f"s3://{self.bucket_name}/{filename}"
-        except Exception as e:
-            logging.error(f"Error saving to S3: {e}")
-            raise
+    def split_dataframe(self, df: pd.DataFrame, chunk_size: int = 10000) -> List[pd.DataFrame]:
+        """Split dataframe into smaller chunks"""
+        chunks = []
+        num_chunks = len(df) // chunk_size + (1 if len(df) % chunk_size else 0)
+        for i in range(num_chunks):
+            chunks.append(df[i * chunk_size:(i + 1) * chunk_size])
+        return chunks
 
-    def save_json_as_csv(self, data: List[Dict], base_filename: str) -> str:
+    def save_df_as_csv(self, df: pd.DataFrame, file_name: str, 
+                      ACL='public-read', max_lines: int = 10000, 
+                      max_size: int = 10000000) -> List[str]:
+        """Save DataFrame to CSV in S3 with chunking support"""
+        chunks = [df]
+        if df.memory_usage(index=False).sum() > max_size or len(df) > max_lines:
+            chunks = self.split_dataframe(df, chunk_size=max_lines)
+
+        urls = []
+        for chunk_id, chunk in enumerate(chunks):
+            chunk_name = f"{file_name}--{chunk_id}.csv"
+            chunk.to_csv(f"s3://{self.bucket_name}/{chunk_name}", index=False)
+            self.s3_resource.ObjectAcl(self.bucket_name, chunk_name).put(ACL=ACL)
+            location = self.s3_client.get_bucket_location(Bucket=self.bucket_name)["LocationConstraint"] or 'us-east-1'
+            urls.append(f"https://s3-{location}.amazonaws.com/{self.bucket_name}/{chunk_name}")
+        return urls
+
+    def save_json_as_csv(self, data: List[Dict], file_name: str, 
+                        ACL="public-read", max_lines: int = 10000,
+                        max_size: int = 10000000) -> List[str]:
         """Convert JSON data to CSV and save to S3"""
-        try:
-            df = pd.DataFrame(data)
-            csv_filename = f"{base_filename}.csv"
-            csv_buffer = df.to_csv(index=False)
-            self.s3_client.put_object(
-                Bucket=self.bucket_name,
-                Key=csv_filename,
-                Body=csv_buffer
-            )
-            return f"s3://{self.bucket_name}/{csv_filename}"
-        except Exception as e:
-            logging.error(f"Error saving CSV to S3: {e}")
-            raise
+        df = pd.DataFrame(data)
+        return self.save_df_as_csv(df, file_name, ACL, max_lines, max_size)
 
-    def save_df_as_csv(self, df: pd.DataFrame, base_filename: str) -> str:
-        """Save DataFrame as CSV to S3"""
-        try:
-            csv_filename = f"{base_filename}.csv"
-            csv_buffer = df.to_csv(index=False)
-            self.s3_client.put_object(
-                Bucket=self.bucket_name,
-                Key=csv_filename,
-                Body=csv_buffer.encode('utf-8')
-            )
-            return f"s3://{self.bucket_name}/{csv_filename}"
-        except Exception as e:
-            logging.error(f"Error saving DataFrame as CSV to S3: {e}")
-            raise
+    def get_most_recent_datafile(self) -> Optional[str]:
+        """Get the most recent data file from S3"""
+        datafiles = []
+        for obj in self.bucket.objects.all():
+            if obj.key.startswith("data_"):
+                datafiles.append(obj.key)
+
+        if not datafiles:
+            return None
+
+        date_pattern = re.compile(r"data_.*?(\d{4}[-_]\d{2}[-_]\d{2}[-_]\d{2}[-_]\d{2})")
+        
+        def extract_date(filename):
+            match = date_pattern.search(filename)
+            if match:
+                date_str = re.sub(r"[^\d]", "-", match.group(1))
+                return datetime.strptime(date_str, "%Y-%m-%d-%H-%M")
+            return datetime.min
+
+        return max(datafiles, key=extract_date)
+
+    def load_data(self) -> None:
+        """Load the most recent data file from S3"""
+        most_recent_file = self.get_most_recent_datafile()
+        if most_recent_file:
+            self.scraper_data = self.load_json(most_recent_file)
+        else:
+            logging.warning("No data files found in S3 bucket.")
+
+    def load_json(self, filename: str) -> Dict:
+        """Load JSON data from S3"""
+        obj = self.s3_client.get_object(Bucket=self.bucket_name, Key=filename)
+        return json.loads(obj['Body'].read().decode('utf-8'))
+
+    def set_start_end_date(self) -> None:
+        """Set start and end dates from environment or metadata"""
+        if not self.start_date and "INGEST_FROM_DATE" in os.environ:
+            self.start_date = os.getenv("INGEST_FROM_DATE")
+        elif "last_date_ingested" in self.metadata:
+            self.start_date = self.metadata["last_date_ingested"]
+            
+        if not self.end_date and "INGEST_TO_DATE" in os.environ:
+            self.end_date = os.getenv("INGEST_TO_DATE")
+            
+        if self.start_date:
+            self.start_date = datetime.strptime(self.start_date, "%Y-%m-%d-%H-%M")
+        if self.end_date:
+            self.end_date = datetime.strptime(self.end_date, "%Y-%m-%d-%H-%M")
 
     def run(self) -> None:
         """Main ingestion method - must be implemented by subclasses"""

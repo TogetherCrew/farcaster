@@ -8,9 +8,11 @@ class FarcasterIngester(Ingestor):
     def __init__(self):
         self.cyphers = FarcasterCyphers()  # Using base Cypher class directly
         super().__init__("tc-farcaster-data")  # Your bucket name here
+        self.data = self.scraper_data
     
     def gay(self):
-        print(self.cyphers.test())
+        data = self.data
+        print(data.keys())
 
     def run(self):
         self.gay()
