@@ -47,6 +47,7 @@ class Cypher:
         self.unique_id = datetime.timestamp(datetime.now())
         self.CREATED_ID = f"created:{self.unique_id}"
         self.UPDATED_ID = f"updated:{self.unique_id}"
+        self.asOf = datetime.now().timestamp()
 
     def get_driver(self) -> Union[Neo4jDriver, BoltDriver]:
         """Create and return a Neo4j driver instance"""
@@ -63,8 +64,7 @@ class Cypher:
                   neo4j_driver: Neo4jDriver,
                   query: str,
                   parameters: Optional[Dict] = None,
-                  response_format: str = 'df',
-                  counter: int = 0) -> Union[pd.DataFrame, List[Dict]]:
+                  counter: int = 0) -> List[Dict]:
         """Execute Neo4j query with retry logic"""
         time.sleep(counter * 10)
         assert neo4j_driver is not None, "Driver not initialized!"
@@ -74,18 +74,14 @@ class Cypher:
             session = neo4j_driver.session(database=self.database) if self.database else neo4j_driver.session()
             result = session.run(query, parameters)
             
-            if response_format == 'json':
-                response = [record.data() for record in result]
-            else:  # default to 'df'
-                response = pd.DataFrame([record.values() for record in result], columns=result.keys())
-                
+            response = [record.data() for record in result]
             return response
             
         except Exception as e:
             logging.error(f"Query failed: {e}")
             if counter > 10:
                 raise e
-            return self.run_query(neo4j_driver, query, parameters, response_format, counter + 1)
+            return self.run_query(neo4j_driver, query, parameters, counter + 1)
         finally:
             if session:
                 session.close()
@@ -93,11 +89,10 @@ class Cypher:
 
     def query(self,
               query: str,
-              parameters: Optional[Dict] = None,
-              response_format: str = 'df') -> Union[pd.DataFrame, List[Dict]]:
-        """Execute query and return results in specified format"""
+              parameters: Optional[Dict] = None) -> List[Dict]:
+        """Execute query and return results"""
         neo4j_driver = self.get_driver()
-        return self.run_query(neo4j_driver, query, parameters, response_format)
+        return self.run_query(neo4j_driver, query, parameters)
 
     def sanitize_text(self, text: Optional[str]) -> str:
         """Clean text for safe database insertion"""
@@ -145,6 +140,9 @@ class Ingestor:
         
         if not hasattr(self, 'cyphers'):
             raise NotImplementedError("Cyphers have not been instantiated to self.cyphers")
+
+        # Print size of scraper_data
+        logging.info(f"Size of scraper_data: {self.get_size(self.scraper_data)} bytes")
 
     def configure_bucket(self):
         """Configure bucket for public access and object ownership"""
@@ -253,6 +251,8 @@ class Ingestor:
         """Load the most recent data file from S3"""
         most_recent_file = self.get_most_recent_datafile()
         if most_recent_file:
+            logging.info(f"File found: {most_recent_file}")
+            logging.info(f"Loading file: {most_recent_file}")
             self.scraper_data = self.load_json(most_recent_file)
         else:
             logging.warning("No data files found in S3 bucket.")
