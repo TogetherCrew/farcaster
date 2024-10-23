@@ -23,5 +23,5 @@ class FarcasterCyphers(Cypher):
                 channel.description = rows.description
             RETURN COUNT(channel)
             """
-            count += self.query(query)[0].value()
+            count += self.query(query)[0]
         return count 

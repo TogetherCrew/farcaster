@@ -39,7 +39,6 @@ def get_query_logging(function):
     return wrapper
 
 class Cypher:
-    # [Keep your existing Cypher class exactly as is]
     """Base class for Neo4j database operations"""
     def __init__(self, database: Optional[str] = None) -> None:
         load_dotenv()
@@ -64,7 +63,7 @@ class Cypher:
                   neo4j_driver: Neo4jDriver,
                   query: str,
                   parameters: Optional[Dict] = None,
-                  counter: int = 0) -> List[Dict]:
+                  counter: int = 0) -> Any:
         """Execute Neo4j query with retry logic"""
         time.sleep(counter * 10)
         assert neo4j_driver is not None, "Driver not initialized!"
@@ -74,8 +73,7 @@ class Cypher:
             session = neo4j_driver.session(database=self.database) if self.database else neo4j_driver.session()
             result = session.run(query, parameters)
             
-            response = [record.data() for record in result]
-            return response
+            return result.single()
             
         except Exception as e:
             logging.error(f"Query failed: {e}")
@@ -89,8 +87,8 @@ class Cypher:
 
     def query(self,
               query: str,
-              parameters: Optional[Dict] = None) -> List[Dict]:
-        """Execute query and return results"""
+              parameters: Optional[Dict] = None) -> Any:
+        """Execute query and return results in default Neo4j format"""
         neo4j_driver = self.get_driver()
         return self.run_query(neo4j_driver, query, parameters)
 
