@@ -156,8 +156,9 @@ class FetchFarcasterHubData:
 
     ### return dict with "channels" that is a list of these I can iterate through
     def run(self):
+        all_channel_data = {"channels": []}
         for channel in self.channels:
-            channel_dict = self.channel_dict = {}
+            channel_dict = {}
             channel_dict["channel"] = channel
             channel_dict['channel_metadata'] = self.get_channel_metadata(channel)
             members = self.get_channel_members(channel)
@@ -171,11 +172,13 @@ class FetchFarcasterHubData:
             channel_dict['all_channels'] = self.get_all_user_channels(followers)
             channel_dict['all_followed_channels'] = self.get_all_user_channels(all_fids)
             
+            all_channel_data["channels"].append(channel_dict)
+            
             helpers.save_data(
                 self.s3_client,
                 self.BUCKET_NAME,
                 "data_" + "farcaster_" + str(self.runtime) + '.json',
-                self.data
+                all_channel_data
             )
             channel_casts = self.get_channel_casts(channel)
             print(len(channel_casts))

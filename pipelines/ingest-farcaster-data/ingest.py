@@ -38,7 +38,9 @@ class FarcasterIngester(Ingestor):
         """
         Creates followers & non-nested metadata
         """
-        all_channel_followers = self.scraper_data['channels_data']['followers']
+        print(self.scraper_data.keys())
+        print(self.scraper_data['followers'][0:1])
+        all_channel_followers = self.scraper_data['followers']
         followers_df = pd.DataFrame([{
             'channelId': channel,
             'fid': str(user.get('fid')),
@@ -63,7 +65,7 @@ class FarcasterIngester(Ingestor):
         Connect followers to other followed channels
         """
         additional_channels = self.scraper_data['channels_data']['all_followed_channels']
-        additional_channels_df = additional_channels_df[['id', 'fid']]
+        additional_channels_df = additional_channels[['id', 'fid']]
         additional_channels_df['fid'] = additional_channels_df['fid'].astype(str)
         additional_channels_urls = self.save_df_as_csv(additional_channels_df, f"all_channel_members_{self.asOf}.csv")
         self.cyphers.connect_additional_channel_memberships(additional_channels_urls)
@@ -140,13 +142,13 @@ class FarcasterIngester(Ingestor):
         self.cyphers.connect_cast_recasts(recasts_urls)
 
     def run(self):
-        self.create_indexes()
+        # self.create_indexes()
         for channel in self.channels:
             self.create_channel_followers(channel)
-            self.connect_channel_members(channel)
-            self.create_or_merge_channels()
-            self.connect_channel_moderators()
-            self.create_connect_channel_casts()
+            # self.connect_channel_members(channel)
+            # self.create_or_merge_channels()
+            # self.connect_channel_moderators()
+            # self.create_connect_channel_casts()
 
 if __name__ == "__main__":
     ingester = FarcasterIngester()
