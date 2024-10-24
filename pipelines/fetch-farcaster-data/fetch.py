@@ -19,7 +19,7 @@ class FetchFarcasterHubData:
     def __init__(self):
         self.NEYNAR_API_KEY = os.getenv("NEYNAR_API_KEY")
         self.FARCASTER_EPOCH = datetime(2021, 1, 1, tzinfo=timezone.utc)
-        self.AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY")
+        self.AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
         self.AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
         self.BUCKET_NAME = os.getenv('BUCKET_NAME')
         self.data = {}
@@ -59,12 +59,12 @@ class FetchFarcasterHubData:
             channel_followers = helpers.query_neynar_api(endpoint, params, headers)
             return channel_followers
         except r.RequestException as e:
-            self.logger.error(f"Error fetching channel followers: {e}")
+            logging.error(f"Error fetching channel followers: {e}")
 
 
     def get_channel_members(self, channel_id):
         if not isinstance(channel_id, (str, int)):
-            self.logger.error(f"Invalid channel_id type: {type(channel_id)}. Expected str or int.")
+            logging.error(f"Invalid channel_id type: {type(channel_id)}. Expected str or int.")
             return None
 
         headers = {
@@ -84,7 +84,7 @@ class FetchFarcasterHubData:
             channel_members = helpers.query_neynar_api(endpoint, params, headers)
             return channel_members
         except r.RequestException as e:
-            self.logger.error(f"Error fetching channel members: {e}")
+            logging.error(f"Error fetching channel members: {e}")
             return None
 
 
@@ -115,47 +115,28 @@ class FetchFarcasterHubData:
             channel_metadata = helpers.query_neynar_api(endpoint, params, headers) 
             return channel_metadata
         except r.RequestException as e:
-            self.logger.error(f"Error fetching channel metadata: {e}")
+            logging.error(f"Error fetching channel metadata: {e}")
             return None
         
-    def get_user_casts_in_channel(self, channel, fids):
-        endpoint = "feed/user/casts"
+    def get_channel_casts(self, channel):
+        logging.info(f"Getting casts for channel: {channel}")
+        endpoint = "feed/channels"
         all_filtered_casts = []
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=int(self.manual_cutoff))
         headers = {
             'accept': 'application/json',
             'api_key': self.NEYNAR_API_KEY
         }
-
-        for fid in fids:
-            self.logger.info(f"Collecting casts for user {fid} in channel {channel}.....")
-            params = {
-                'fid': fid, 
-                'api_key': self.NEYNAR_API_KEY,
-                'limit': 150,
-                'channel_fid': channel
-            }
-            try:
-                casts_in_channel = helpers.query_neynar_api(endpoint, params, headers)
-                for cast in casts_in_channel:
-                    if 'timestamp' in cast:
-                        try:
-                            cast_timestamp = datetime.strptime(cast['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
-                        except ValueError:
-                            # If the above fails, try parsing without milliseconds
-                            cast_timestamp = datetime.strptime(cast['timestamp'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
-                        print(f"Cast timestamp: {cast_timestamp}")
-                        if cast_timestamp >= cutoff_date:
-                            all_filtered_casts.append(cast)
-            except Exception as e:
-                self.logger.error(f"Error fetching casts in channel {channel} for user {fid}: {e}")
-                continue
-
+        params = {
+            'channel_ids': channel, 
+            'limit': 100,
+            'with_replies': True
+        }
+        all_filtered_casts = helpers.query_neynar_api(endpoint, params, headers, cutoff_days=self.cutoff)
         return all_filtered_casts
         
     def get_all_user_channels(self, fids):
         for fid in fids:
-            self.logger.info(f"Collecting additional channels for user {fid}...")
+            logging.info(f"Collecting additional channels for user {fid}...")
             endpoint = "user/channels"
             headers = {
                 'accept': 'application/json',
@@ -169,13 +150,9 @@ class FetchFarcasterHubData:
                 additional_channels = helpers.query_neynar_api(endpoint, params, headers)
                 return additional_channels
             except Exception as e:
-                self.logger.error(f"Error fetching additional channels for user {fid}")
+                logging.error(f"Error fetching additional channels for user {fid}")
                 return None 
-            
-    def get_channel_casts(self, channel):
-        
-
-        
+                    
 
     ### return dict with "channels" that is a list of these I can iterate through
     def run(self):
@@ -187,14 +164,21 @@ class FetchFarcasterHubData:
             followers = self.get_channel_followers(channel)
             channel_dict['members'] = members 
             channel_dict['followers'] = followers 
+            # Extract fids from members and followers
+            member_fids = [str(member['user']['fid']) for member in members if 'user' in member and 'fid' in member['user']]
+            follower_fids = [str(follower['fid']) for follower in followers if 'fid' in follower]
+            all_fids = list(set(member_fids + follower_fids))
             channel_dict['all_channels'] = self.get_all_user_channels(followers)
-            self.data['channels_data'] = channel_dict
+            channel_dict['all_followed_channels'] = self.get_all_user_channels(all_fids)
+            
             helpers.save_data(
                 self.s3_client,
                 self.BUCKET_NAME,
                 "data_" + "farcaster_" + str(self.runtime) + '.json',
                 self.data
             )
+            channel_casts = self.get_channel_casts(channel)
+            print(len(channel_casts))
 
 
 if __name__ == "__main__":
