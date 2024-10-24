@@ -95,12 +95,6 @@ class FetchFarcasterHubData:
             fids.add(member.get('fid'))
         return list(fids)
         
-
-    def get_all_channel_fids(self, followers, members):
-        members_ids = self.get_all_fids_channel_members(members)
-        followers_ids = self.get_all_fids_channel_followers(followers)
-        return list(set(members_ids + followers_ids))
-
     
     def get_all_fids_channel_followers(self, channel_followers):
         fids = set()
@@ -178,21 +172,22 @@ class FetchFarcasterHubData:
                 self.logger.error(f"Error fetching additional channels for user {fid}")
                 return None 
             
-
+    def get_channel_casts(self, channel):
+        
 
         
+
+    ### return dict with "channels" that is a list of these I can iterate through
     def run(self):
         for channel in self.channels:
             channel_dict = self.channel_dict = {}
+            channel_dict["channel"] = channel
             channel_dict['channel_metadata'] = self.get_channel_metadata(channel)
             members = self.get_channel_members(channel)
             followers = self.get_channel_followers(channel)
-            all_channel_fids = self.get_all_channel_fids(members, followers)
             channel_dict['members'] = members 
             channel_dict['followers'] = followers 
-            channel_dict['all_channel_fids'] = all_channel_fids
-            channel_dict['casts'] = self.get_user_casts_in_channel(channel, all_channel_fids)
-            channel_dict['all_channels'] = self.get_all_user_channels(all_channel_fids)
+            channel_dict['all_channels'] = self.get_all_user_channels(followers)
             self.data['channels_data'] = channel_dict
             helpers.save_data(
                 self.s3_client,

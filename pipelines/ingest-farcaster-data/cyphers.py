@@ -10,7 +10,6 @@ class FarcasterCyphers(Cypher):
 
     @count_query_logging
     def create_or_merge_channels(self, urls):
-        print(urls)
         count = 0
         for url in urls:
             query = f"""
@@ -25,3 +24,68 @@ class FarcasterCyphers(Cypher):
             """
             count += self.query(query)[0]
         return count 
+    
+    @count_query_logging
+    def connect_channel_members(self, urls):
+        count = 0 
+        for url in urls:
+            query = f"""
+            LOAD CSV WITH HEADERS FROM '{url}' AS rows
+            MERGE (member:User:Farcaster {{fid: 'rows.fid'}}) 
+            MATCH (channel:Channel)
+            MERGE (member)-[r:MEMBER]->(channel)
+            RETURN COUNT(member)
+            """
+            count += self.query(query)[0]
+        return count 
+    
+    
+    @count_query_logging
+    def connect_channel_moderators(self, urls):
+        count = 0 
+        for url in urls:
+            query = f"""
+            LOAD CSV WITH HEADERS FROM '{url}' AS rows
+            WITH rows
+            MATCH (channel:Channel {{id: 'rows.id'}})
+            MATCH (user:User:Farcaster {{fid: 'rows.fid'}})
+            MERGE (user)-[r:MODERATOR]->(channel)
+            RETURN COUNT(r)
+            """
+            count += self.query(query)[0]
+        return count 
+
+    @count_query_logging
+    def create_followers_set_properties(self, urls):
+        count = 0 
+        for url in urls:
+            query = f"""
+            LOAD CSV WITH HEADERS FROM '{url}' AS rows
+            MERGE (user:User:Farcaster {{fid: 'rows.fid'}})
+            SET user.username = rows.username
+            SET user.displayName = rows.display_name
+            SET user.powerBadge = rows.power_padge
+            RETURN COUNT(user)
+            """
+            count += self.query(query)[0]
+        return count 
+    
+
+    @count_query_logging
+    def create_connect_custody_wallets(self, urls):
+        count = 0 
+        for url in urls:
+            query = f"""
+            LOAD CSV WITH HEADERS FROM '{url}' AS rows
+            MATCH (user:User:Farcaster {{fid: 'rows.fid'}})
+            MERGE (wallet:Wallet:Farcaster {{address: rows.custody_address}})
+            MERGE (user)-[r:ACCOUNT]->(wallet)
+            SET r.source = 'Farcaster'
+            SET r.type = 'custody_address'
+            RETURN COUNT(r) 
+            """
+            count += self.query(query)[0]
+        return count 
+    
+
+    
