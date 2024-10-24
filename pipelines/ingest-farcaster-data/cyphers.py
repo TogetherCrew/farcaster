@@ -8,23 +8,54 @@ class FarcasterCyphers(Cypher):
 
     def create_user_fid_index(self):
         logging.info("Creating users index...")
-        query = """CREATE INDEX user_fid_index IF NOT EXISTS FOR (u:User) ON (u.fid)"""
+        query = """CREATE INDEX farcaster_user_fid_index IF NOT EXISTS FOR (u:User:Farcaster) ON (u.fid)"""
         self.query(query)
 
     def create_cast_index(self):
         logging.info("Creating casts index...")
-        query = """CREATE INDEX cast_hash_index IF NOT EXISTS FOR (c:Cast) ON (c.hash)"""
+        query = """CREATE INDEX farcaster_cast_hash_index IF NOT EXISTS FOR (c:Cast) ON (c.hash)"""
         self.query(query)
 
     def create_wallet_index(self):
         logging.info("Creating wallets index...")
-        query = """CREATE INDEX wallet_address_index IF NOT EXISTS FOR (w:Wallet) ON (w.address)"""
+        query = """CREATE INDEX farcaster_wallet_address_index IF NOT EXISTS FOR (w:Wallet:Farcaster) ON (w.address)"""
         self.query(query)
 
     def create_channel_id_index(self):
         logging.info("Creating channels index...")
-        query = """CREATE INDEX channel_id_index IF NOT EXISTS FOR (c:Channel) ON (c.channelId)"""
+        query = """CREATE INDEX farcaster_channel_id_index IF NOT EXISTS FOR (c:Channel) ON (c.channelId)"""
         self.query(query)
+
+
+    @count_query_logging
+    def create_followers_set_properties(self, urls):
+        count = 0 
+        for url in urls:
+            query = f"""
+            LOAD CSV WITH HEADERS FROM '{url}' AS rows
+            MERGE (user:User:Farcaster {{fid: rows.fid}})
+            SET user.username = rows.username
+            SET user.bio = rows.bio_text
+            SET user.displayName = rows.display_name
+            SET user.powerBadge = rows.power_padge
+            RETURN COUNT(user)
+            """
+            count += self.query(query)[0]
+        return count 
+    
+    @count_query_logging
+    def connect_followers_to_channels(self, urls, channel_id):
+        count = 0 
+        for url in urls:
+            query = f"""
+            LOAD CSV WITH HEADERS FROM '{url}' AS rows
+            MATCH (user:User {{fid: rows.fid}})
+            MATCH (channel:Channel {{channelId: '{channel_id}'}})
+            MERGE (user)-[r:FOLLOW]->(channel)
+            RETURN COUNT(user)
+            """
+            count += self.query(query)[0]
+        return count 
 
     @count_query_logging
     def create_or_merge_channels(self, urls):
@@ -32,17 +63,16 @@ class FarcasterCyphers(Cypher):
         for url in urls:
             query = f"""
             LOAD CSV WITH HEADERS FROM '{url}' AS rows
-            WITH rows
             MERGE (channel:Channel:Farcaster {{channelId: rows.id}})
-            ON CREATE SET
-                channel.name = rows.name,
-                channel.url = rows.url, 
-                channel.description = rows.description
+            SET channel.name = rows.name
+            SET channel.url = rows.url
+            SET channel.description = rows.description
+            SET channel.moderatorFids = rows.moderator_fids
             RETURN COUNT(channel)
             """
             count += self.query(query)[0]
         return count 
-    
+
     @count_query_logging
     def connect_channel_members(self, urls):
         count = 0 
@@ -70,21 +100,6 @@ class FarcasterCyphers(Cypher):
             MATCH (user:User:Farcaster {{fid: rows.fid}})
             MERGE (user)-[r:MODERATOR]->(channel)
             RETURN COUNT(r)
-            """
-            count += self.query(query)[0]
-        return count 
-
-    @count_query_logging
-    def create_followers_set_properties(self, urls):
-        count = 0 
-        for url in urls:
-            query = f"""
-            LOAD CSV WITH HEADERS FROM '{url}' AS rows
-            MERGE (user:User:Farcaster {{fid: rows.fid}})
-            SET user.username = rows.username
-            SET user.displayName = rows.display_name
-            SET user.powerBadge = rows.power_padge
-            RETURN COUNT(user)
             """
             count += self.query(query)[0]
         return count 
