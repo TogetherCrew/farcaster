@@ -96,42 +96,17 @@ class FarcasterIngester(Ingestor):
             } for cast in channel_casts])
             print(casts_df.head())
         casts_urls = self.save_df_as_csv(casts_df, f"casts_{self.asOf}.csv")
-        # self.cyphers.create_casts(casts_urls)
+        self.cyphers.create_casts(casts_urls)
         """
         Connect authors
         """
-        # self.cyphers.connect_casts_authors()
-        # """
-        # Connect parent cast
-        # """
-        self.cyphers.connect_casts_parent_cast()
-
-        # """
-        # Connect Likes
-        # """
-        # likes_df = pd.DataFrame([
-        #     {'hash': cast['hash'], 'fid': str(like['fid'])} 
-        #     for cast in casts_data 
-        #     for like in cast['reactions']['likes']
-        # ])
-        # likes_urls = self.save_df_as_csv(likes_df, f"cast_likes_{self.asOf}.csv")
-        # self.cyphers.connect_cast_likes(likes_urls)
-        # """
-        # Connect recasts
-        # """
-        # recasts_df = pd.DataFrame([
-        # {'hash': cast['hash'], 'fid': str(recast['fid'])} 
-        # for cast in casts_data 
-        # for recast in cast['reactions']['recasts']
-        # ])
-        # recasts_urls = self.save_df_as_csv(recasts_df, f"cast_recasts_{self.asOf}.csv")
-        # self.cyphers.connect_cast_recasts(recasts_urls)
+        self.cyphers.connect_casts_authors()
 
     def run(self):
-        # self.create_indexes()
-        # self.create_or_merge_channels()
-        # self.create_channel_followers()
-        # self.connect_channel_members()
+        self.create_indexes()
+        self.create_or_merge_channels()
+        self.create_channel_followers()
+        self.connect_channel_members()
         self.create_connect_channel_casts()
 
 if __name__ == "__main__":
