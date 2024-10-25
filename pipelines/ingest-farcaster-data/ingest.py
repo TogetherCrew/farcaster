@@ -58,96 +58,81 @@ class FarcasterIngester(Ingestor):
             """
             Connects followers to custody wallets
             """
-            # followers_and_custody_wallets_df = followers_df[['fid', 'custody_address']]
-            # follwers_and_custody_wallets_urls = self.save_df_as_csv(followers_and_custody_wallets_df, f"followers_custody_wallets_{self.asOf}.csv")
-            # self.cyphers.create_connect_custody_wallets(follwers_and_custody_wallets_urls)
-            """
-            # Connect followers to other followed channels
-            # """
-            # additional_channels = self.scraper_data['channels_data']['all_followed_channels']
-            # additional_channels_df = additional_channels[['id', 'fid']]
-            # additional_channels_df['fid'] = additional_channels_df['fid'].astype(str)
-            # additional_channels_urls = self.save_df_as_csv(additional_channels_df, f"all_channel_members_{self.asOf}.csv")
-            # self.cyphers.connect_additional_channel_memberships(additional_channels_urls)
+            followers_and_custody_wallets_df = followers_df[['fid', 'custody_address']]
+            followers_and_custody_wallets_urls = self.save_df_as_csv(followers_and_custody_wallets_df, f"followers_custody_wallets_{self.asOf}.csv")
+            self.cyphers.create_connect_custody_wallets(followers_and_custody_wallets_urls)
+
 
 
     
-    def connect_channel_members(self, channel):
-        all_channel_members = self.scraper_data['channels_data']['members']
-        all_channel_members_df = pd.DataFrame([{'fid': str(user['user']['fid'])} for user in all_channel_members])
-        all_channel_members_df['channel'] = channel
-        channel_members_urls = self.save_df_as_csv(all_channel_members_df, f'channel_members_{self.asOf}.csv')
-        self.cyphers.connect_channel_members(channel_members_urls)
-
-
-    def connect_channel_moderators(self):
-        channels_data = self.scraper_data['channels_data']['all_channels']
-        moderators_df = pd.DataFrame(channels_data)
-        moderators_df_filtered = moderators_df[['id', 'moderator_fids']]
-        moderators_df_filtered = moderators_df_filtered.explode('moderator_fids')
-        moderators_df_filtered = moderators_df_filtered.rename(columns={'moderator_fids': 'fid'})
-        moderators_df_filtered['fid'] = moderators_df_filtered['fid'].astype(str)
-        moderators_df_filtered.dropna(inplace=True)
-        moderators_urls = self.save_df_as_csv(moderators_df_filtered, f'moderators_{self.asOf}.csv')
-        self.cyphers.connect_channel_moderators(moderators_urls)
-        return None 
-    
+    def connect_channel_members(self):
+        for channel in self.scraper_data["channels"]:
+            channel_members = channel.get('members', [])
+            channel_id = channel.get('channel')
+            members_df = pd.DataFrame([{
+                'fid': str(member['user']['fid']),
+                'channelId': channel_id
+            } for member in channel_members if isinstance(member, dict) and 'user' in member])
+            channel_members_urls = self.save_df_as_csv(members_df, f'channel_members_{channel_id}_{self.asOf}.csv')
+            self.cyphers.connect_channel_members(channel_members_urls)
 
     def create_connect_channel_casts(self):
-        casts_data = self.scraper_data['channels_data']['casts']
-        """
-        Create casts and properties
-        """
-        casts_df = pd.DataFrame([{
-            'hash': cast['hash'],
-            'thread_hash': cast['thread_hash'],
-            'parent_hash': cast['parent_hash'],
-            'author_fid': str(cast['author']['fid']),
-            'text': self.cyphers.sanitize_text(cast['text']),
-            'timestamp': cast['timestamp'],
-            'replies_count': cast['replies']['count'],
-            'recasts_count': cast['reactions']['recasts_count'],
-            'likes_count': cast['reactions']['likes_count']
-        } for cast in casts_data])
+        """Create casts"""
+        for channel in self.scraper_data["channels"]:
+            channel_id = channel.get('channel')
+            channel_casts = channel.get('casts', [])
+            casts_df = pd.DataFrame(channel_casts)            
+            casts_df = pd.DataFrame([{
+                'hash': cast['hash'],
+                'channelId': channel_id,
+                'thread_hash': cast['thread_hash'],
+                'parent_hash': cast['parent_hash'],
+                'author_fid': str(cast['author']['fid']),
+                'text': self.cyphers.sanitize_text(cast['text']),
+                'timestamp': cast['timestamp'],
+                'replies_count': cast['replies']['count'],
+                'recasts_count': cast['reactions']['recasts_count'],
+                'likes_count': cast['reactions']['likes_count']
+            } for cast in channel_casts])
+            print(casts_df.head())
         casts_urls = self.save_df_as_csv(casts_df, f"casts_{self.asOf}.csv")
-        self.cyphers.create_casts(casts_urls)
+        # self.cyphers.create_casts(casts_urls)
         """
         Connect authors
         """
-        self.cyphers.connect_casts_authors()
-        """
-        Connect parent cast
-        """
+        # self.cyphers.connect_casts_authors()
+        # """
+        # Connect parent cast
+        # """
         self.cyphers.connect_casts_parent_cast()
 
-        """
-        Connect Likes
-        """
-        likes_df = pd.DataFrame([
-            {'hash': cast['hash'], 'fid': str(like['fid'])} 
-            for cast in casts_data 
-            for like in cast['reactions']['likes']
-        ])
-        likes_urls = self.save_df_as_csv(likes_df, f"cast_likes_{self.asOf}.csv")
-        self.cyphers.connect_cast_likes(likes_urls)
-        """
-        Connect recasts
-        """
-        recasts_df = pd.DataFrame([
-        {'hash': cast['hash'], 'fid': str(recast['fid'])} 
-        for cast in casts_data 
-        for recast in cast['reactions']['recasts']
-        ])
-        recasts_urls = self.save_df_as_csv(recasts_df, f"cast_recasts_{self.asOf}.csv")
-        self.cyphers.connect_cast_recasts(recasts_urls)
+        # """
+        # Connect Likes
+        # """
+        # likes_df = pd.DataFrame([
+        #     {'hash': cast['hash'], 'fid': str(like['fid'])} 
+        #     for cast in casts_data 
+        #     for like in cast['reactions']['likes']
+        # ])
+        # likes_urls = self.save_df_as_csv(likes_df, f"cast_likes_{self.asOf}.csv")
+        # self.cyphers.connect_cast_likes(likes_urls)
+        # """
+        # Connect recasts
+        # """
+        # recasts_df = pd.DataFrame([
+        # {'hash': cast['hash'], 'fid': str(recast['fid'])} 
+        # for cast in casts_data 
+        # for recast in cast['reactions']['recasts']
+        # ])
+        # recasts_urls = self.save_df_as_csv(recasts_df, f"cast_recasts_{self.asOf}.csv")
+        # self.cyphers.connect_cast_recasts(recasts_urls)
 
     def run(self):
         # self.create_indexes()
         # self.create_or_merge_channels()
-        self.create_channel_followers()
+        # self.create_channel_followers()
         # self.connect_channel_members()
-        # self.connect_channel_moderators()
-        # self.create_connect_channel_casts()
+        self.create_connect_channel_casts()
 
 if __name__ == "__main__":
     ingester = FarcasterIngester()

@@ -171,7 +171,7 @@ class FetchFarcasterHubData:
             all_fids = list(set(member_fids + follower_fids))
             channel_dict['all_channels'] = self.get_all_user_channels(followers)
             channel_dict['all_followed_channels'] = self.get_all_user_channels(all_fids)
-            
+            channel_dict['casts'] = channel_casts = self.get_channel_casts(channel)
             all_channel_data["channels"].append(channel_dict)
             
             helpers.save_data(
@@ -180,8 +180,6 @@ class FetchFarcasterHubData:
                 "data_" + "farcaster_" + str(self.runtime) + '.json',
                 all_channel_data
             )
-            channel_casts = self.get_channel_casts(channel)
-            print(len(channel_casts))
 
 
 if __name__ == "__main__":

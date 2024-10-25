@@ -80,7 +80,7 @@ class FarcasterCyphers(Cypher):
             query = f"""
             LOAD CSV WITH HEADERS FROM '{url}' AS rows
             MERGE (member:User:Farcaster {{fid: rows.fid}}) 
-            WITH member
+            WITH member, rows
             MATCH (channel:Channel {{channelId: rows.channelId}})
             MERGE (member)-[r:MEMBER]->(channel)
             RETURN COUNT(member)
@@ -111,7 +111,7 @@ class FarcasterCyphers(Cypher):
         for url in urls:
             query = f"""
             LOAD CSV WITH HEADERS FROM '{url}' AS rows
-            MATCH (user:User:Farcaster {{fid: 'rows.fid'}})
+            MATCH (user:User:Farcaster {{fid: rows.fid}})
             MERGE (wallet:Wallet:Farcaster {{address: rows.custody_address}})
             WITH user, wallet
             MERGE (user)-[r:ACCOUNT]->(wallet)
@@ -119,6 +119,7 @@ class FarcasterCyphers(Cypher):
             SET r.type = 'custody_address'
             RETURN COUNT(r) 
             """
+            print(query)
             count += self.query(query)[0]
         return count 
     
@@ -154,67 +155,4 @@ class FarcasterCyphers(Cypher):
         RETURN COUNT(author)
         """
         count += self.query(query)[0]
-        return count 
-
-    @count_query_logging
-    def connect_casts_parent_cast(self):
-        count = 0 
-        query = """
-        MATCH (cast:Cast)
-        MATCH (parentCast:Cast)
-        WHERE NOT (cast)-[]-(parentCast)
-        AND cast.threadHash = parentCast.threadHash
-        AND cast.parentHash = parentCast.hash 
-        MERGE (cast)-[r:REPLIED]->(parentCast)
-        RETURN COUNT(cast)
-        """
-        count += self.query(query)[0]
-        return count 
-
-
-    @count_query_logging
-    def connect_cast_likes(self, urls):
-        count = 0 
-        for url in urls:
-            query = f"""
-            LOAD CSV WITH HEADERS FROM '{url}' AS rows
-            MERGE (user:User:Farcaster {{fid: rows.fid}})
-            WITH user, rows.hash as hash
-            MATCH (cast:Cast {{hash: hash}})
-            WITH user, cast
-            MERGE (user)-[r:LIKED]->(cast)
-            RETURN COUNT(user)
-            """
-            print(query)
-            count += self.query(query)[0]
-        return count 
-    
-    @count_query_logging
-    def connect_cast_recasts(self, urls):
-        count = 0 
-        for url in urls:
-            query = f"""
-            LOAD CSV WITH HEADERS FROM '{url}' AS rows
-            MERGE (user:User:Farcaster {{fid: rows.fid}})
-            WITH user, rows.hash as hash
-            MATCH (cast:Cast {{hash: hash}})
-            MERGE (user)-[r:POSTED]->(cast)
-            RETURN COUNT(user)
-            """
-            count += self.query(query)[0]
-        return count 
-    
-
-    @count_query_logging
-    def connect_additional_channel_memberships(self, urls):
-        count = 0 
-        for url in urls:
-            query = f"""
-            LOAD CSV WITH HEADERS FROM '{url}' AS rows
-            MATCH (user:User:Farcaster {{fid: rows.fid}})
-            MATCH (channel:Channel {{channelId: rows.id}})
-            MERGE (user)-[r:MEMBER]->(channel)
-            RETURN COUNT(user)
-            """
-            count += self.query(query)[0]
         return count 
