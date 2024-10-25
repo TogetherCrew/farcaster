@@ -1,64 +1,118 @@
-# Farcaster Ingestion & Cypher Overview
+# Farcaster Data Pipeline
 
-The `helpers.py` file contains helpers functions to ingest data from S3, process it, and load it into a Neo4j database, with specific logic for handling Farcaster channels and users. It consists of two key classes: **FarcasterIngester** (which handles data ingestion) and **FarcasterCyphers** (which manages Neo4j queries). 
+A data pipeline for processing Farcaster social data into a Neo4j graph database.
 
 ## How It Works
 
-### 1. **FarcasterIngester Class**
-   - **Purpose:** This class extends the base `Ingestor` class and adds custom logic for ingesting Farcaster data, specifically handling channel and user relationships.
-   - **Key Workflow:**
-     1. **Initialization:**
-        - When initialized, it sets up a connection to the **"tc-farcaster-data"** S3 bucket and loads channel data into the `scraper_data` attribute.
-        - It also sets up an instance of `FarcasterCyphers`, which handles Neo4j interactions.
-     2. **Data Loading & Processing:**
-        - The ingester reads the latest Farcaster channel data from S3, converting it into a Pandas DataFrame.
-        - The `create_or_merge_channels()` method filters the DataFrame to retain only relevant columns (`id`, `url`, `name`, `description`), then saves this data as a CSV in S3.
-        - The S3 file URL is passed to the **Cypher** methods for insertion into the Neo4j database.
-     3. **Handling Cypher Queries:**
-        - For each function that processes a different type of data (e.g., users, wallets, channel members), there’s a corresponding method in the **Cyphers** class that handles the database operations.
-        - The `run()` method defines the overall ingestion flow. It starts with channel ingestion and can be extended to include other data types like users, channel members, and relationships.
-     4. **Output:**
-        - After executing each ingestion step, URLs of saved CSV files are printed to provide confirmation that data is processed and uploaded to S3.
+### Core Components
 
-### 2. **FarcasterCyphers Class**
-   - **Purpose:** Extends the base `Cypher` class, implementing custom Cypher queries for creating and merging Farcaster-specific nodes and relationships.
-   - **Key Workflow:**
-     1. **Handling Neo4j Connections:**
-        - The class inherits methods for establishing connections to Neo4j, executing queries, and handling retries on failure.
-     2. **Channel Merging:**
-        - The `create_or_merge_channels()` method receives the URLs of CSV files saved by the **Ingester**. 
-        - It runs a Cypher `LOAD CSV` command to insert or merge channel data into the Neo4j database.
-        - The use of `MERGE` ensures that channels are not duplicated, updating existing entries or creating new ones as needed.
-     3. **Query Logging:**
-        - Each query method is decorated with logging helpers (`@count_query_logging`) to provide real-time feedback on the number of nodes created or merged.
-        - This makes it easy to monitor the progress of data ingestion directly from the logs.
+#### ingest.py
+The main ingestion script handles the data flow:
+1. Loads raw data from S3
+2. Creates database indexes for each object type
+3. Processes channels and their followers
+4. Links users to channels and wallets
+5. Processes and links casts
 
-### 3. **AWS S3 Integration**
-   - **Purpose:** The S3 integration enables loading and saving data during the ingestion process.
-   - **Key Workflow:**
-     1. **Loading Data:**
-        - The `FarcasterIngester` starts by fetching the most recent data files from S3, reading them into memory for processing.
-     2. **Saving Data:**
-        - As data is transformed into a suitable format (e.g., DataFrame), it’s saved back to S3 in CSV format. This step involves chunking large files to avoid memory issues.
-     3. **Data Reusability:**
-        - Once saved to S3, the processed data is accessible via generated URLs, making it available for subsequent database insertion or analysis.
+#### helpers.py
+Provides database interaction and utility functions:
+- Query execution with retry logic
+- Data chunking for large datasets
+- S3 operations
+- Text sanitization
 
-### Putting It All Together
-The typical workflow for ingesting Farcaster data is as follows:
+#### cyphers.py
+Contains all Neo4j queries for:
+- Creating/updating nodes
+- Establishing relationships
+- Setting node properties
+- Managing indexes
 
-1. **Load Data from S3:** 
-   - The `FarcasterIngester` fetches the latest Farcaster data from S3 and loads it into memory.
-   
-2. **Transform Data:**
-   - Data is processed into Pandas DataFrames, filtered to retain necessary columns, and saved back to S3 as CSVs.
-   
-3. **Run Cypher Queries:**
-   - The CSV URLs are passed to the **FarcasterCyphers** class, which executes Cypher queries to create or merge data into Neo4j.
-   
-4. **Save Processed Data:**
-   - Final datasets are saved back to S3, ensuring that the data is up-to-date and accessible for further ingestion.
+### Data Flow
+```
+Raw S3 Data → Channel Processing → User Processing → Cast Processing → Neo4j Graph
+```
 
-### Extending the Workflow
-- To handle additional data types (e.g., users, wallets), implement the respective methods in both `FarcasterIngester` and `FarcasterCyphers`.
-- Adjust the `run()` method in **FarcasterIngester** to define the sequence of ingestion steps, adding calls to new ingestion methods as needed.
+## Object Definitions
 
+### Nodes
+
+#### User (:User:Farcaster)
+```
+{
+    fid: string,            // Farcaster ID
+    username: string,       // @handle
+    displayName: string,    // Display name
+    bio: string,           // User bio
+    powerBadge: string     // User's power badge status
+}
+```
+
+#### Cast (:Cast:Farcaster)
+```
+{
+    hash: string,          // Unique cast identifier
+    authorFid: string,     // FID of author
+    threadHash: string,    // Parent thread identifier
+    parentHash: string,    // Direct parent cast
+    text: string,          // Cast content
+    repliesCount: int,     // Number of replies
+    recastsCount: int,     // Number of recasts
+    likesCount: int        // Number of likes
+}
+```
+
+#### Channel (:Channel:Farcaster)
+```
+{
+    channelId: string,     // Unique channel ID
+    name: string,          // Channel name
+    url: string,           // Channel URL
+    description: string,   // Channel description
+    moderatorFids: array   // List of moderator FIDs
+}
+```
+
+#### Wallet (:Wallet:Farcaster)
+```
+{
+    address: string        // Wallet address
+}
+```
+
+### Relationships
+
+```
+[:POSTED]  User → Cast     // User created cast
+[:FOLLOW]  User → Channel  // User follows channel
+[:MEMBER]  User → Channel  // User is channel member
+[:ACCOUNT] User → Wallet   // User owns wallet
+```
+
+## Data Processing Examples
+
+### Creating a User-Cast Relationship
+```cypher
+MATCH (cast:Cast:Farcaster)
+WHERE NOT (cast)-[:POSTED]-()
+WITH cast 
+MATCH (author:User:Farcaster)
+WHERE author.fid = cast.authorFid 
+MERGE (author)-[r:POSTED]->(cast)
+```
+
+### Linking Users to Channels
+```cypher
+MATCH (user:User {fid: rows.fid})
+MATCH (channel:Channel {channelId: channelId})
+MERGE (user)-[r:FOLLOW]->(channel)
+```
+
+### Processing Wallet Connections
+```cypher
+MATCH (user:User:Farcaster {fid: rows.fid})
+MERGE (wallet:Wallet:Farcaster {address: rows.custody_address})
+MERGE (user)-[r:ACCOUNT]->(wallet)
+SET r.source = 'Farcaster'
+SET r.type = 'custody_address'
+```
