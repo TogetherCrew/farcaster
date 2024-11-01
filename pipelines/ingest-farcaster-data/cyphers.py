@@ -35,6 +35,7 @@ class FarcasterCyphers(Cypher):
             LOAD CSV WITH HEADERS FROM '{url}' AS rows
             MERGE (user:User:Farcaster {{fid: rows.fid}})
             SET user.username = rows.username
+            SET user.verifiedSocials = rows.verifiedSocials
             SET user.bio = rows.bio_text
             SET user.displayName = rows.display_name
             SET user.powerBadge = rows.power_padge

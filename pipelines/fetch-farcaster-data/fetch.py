@@ -165,6 +165,10 @@ class FetchFarcasterHubData:
             followers = self.get_channel_followers(channel)
             channel_dict['members'] = members 
             channel_dict['followers'] = followers 
+            print("members........................")
+            print(channel_dict['members'][0:20])
+            print(f"followers.........................")
+            print(channel_dict['followers'][:20])
             # Extract fids from members and followers
             member_fids = [str(member['user']['fid']) for member in members if 'user' in member and 'fid' in member['user']]
             follower_fids = [str(follower['fid']) for follower in followers if 'fid' in follower]

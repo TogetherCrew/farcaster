@@ -1,6 +1,6 @@
 # Farcaster Data Pipeline
 
-A data pipeline for processing Farcaster social data into a Neo4j graph database.
+A data pipeline for processing Farcaster social data into Neo4J.
 
 ## How It Works
 

@@ -42,9 +42,11 @@ class FarcasterIngester(Ingestor):
             followers_df = pd.DataFrame([{
                 'channelId': channelId,
                 'fid': str(user.get('fid')),
+                'verifiedSocials': user.get('profile').get('verified_accounts'),
                 'username': self.cyphers.sanitize_text(user.get('username', '')),
                 'display_name': self.cyphers.sanitize_text(user.get('display_name', '')),
                 'custody_address': user.get('custody_address', ''),
+                'allWallets': user.get('verified_addresses').get('eth_addresses'),
                 'bio_text': self.cyphers.sanitize_text(user.get('profile', {}).get('bio', {}).get('text', '')),
                 'power_badge': user.get('power_badge', '')
             } for user in channel["followers"] if isinstance(user, dict)])   
