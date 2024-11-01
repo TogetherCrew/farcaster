@@ -45,6 +45,8 @@ Raw S3 Data → Channel Processing → User Processing → Cast Processing → N
     displayName: string,    // Display name
     bio: string,           // User bio
     powerBadge: string     // User's power badge status
+    verifiedSocials: list of dicts // Users verified social media accounts, i.e. Twitter
+    allWallets: list // Users verified ETH wallets
 }
 ```
 
