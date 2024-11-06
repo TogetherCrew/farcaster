@@ -30,7 +30,3 @@ CHANNEL_IDS=["optimism","arbitrum"]  # array of channel IDs
 
 ## Output
 Data is saved to S3 as: `data_farcaster_YYYY-MM-DD-HH-MM.json`
-
-## Todos
-- API response formats
-- Recommended best practices, i.e. avoid manipulating retrieved data if possible
