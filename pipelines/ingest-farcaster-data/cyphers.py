@@ -36,6 +36,7 @@ class FarcasterCyphers(Cypher):
             MERGE (user:User:Farcaster {{fid: rows.fid}})
             SET user.username = rows.username
             SET user.verifiedSocials = rows.verifiedSocials
+            SET user.allWallets = rows.
             SET user.bio = rows.bio_text
             SET user.displayName = rows.display_name
             SET user.powerBadge = rows.power_padge
