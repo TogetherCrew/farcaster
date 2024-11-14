@@ -173,7 +173,7 @@ class FetchFarcasterHubData:
             member_fids = [str(member['user']['fid']) for member in members if 'user' in member and 'fid' in member['user']]
             follower_fids = [str(follower['fid']) for follower in followers if 'fid' in follower]
             all_fids = list(set(member_fids + follower_fids))
-            channel_dict['all_channels'] = self.get_all_user_channels(followers)
+            channel_dict['all_channels'] = self.get_all_user_channels(follower_fids)
             channel_dict['all_followed_channels'] = self.get_all_user_channels(all_fids)
             channel_dict['casts'] = channel_casts = self.get_channel_casts(channel)
             all_channel_data["channels"].append(channel_dict)

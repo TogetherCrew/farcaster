@@ -2,7 +2,6 @@ import os
 import logging
 import time
 import re
-import math
 import sys
 from datetime import datetime
 from typing import Optional, Union, List, Dict, Any
@@ -13,7 +12,6 @@ from functools import wraps
 import json
 import boto3
 from botocore.exceptions import ClientError
-from tqdm import tqdm
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
