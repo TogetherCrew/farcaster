@@ -1,0 +1,116 @@
+from .helpers import Ingestor, Cypher
+
+from .cyphers import FarcasterCyphers
+from datetime import datetime
+import os 
+from dotenv import load_dotenv
+import logging
+import pandas as pd
+
+logging.basicConfig(level=logging.INFO)
+load_dotenv()
+
+class FarcasterIngester(Ingestor):
+    def __init__(self):
+        self.cyphers = FarcasterCyphers() 
+        self.asOf = datetime.now().timestamp()
+        self.channels = os.getenv('CHANNEL_IDS')
+        super().__init__("tc-farcaster-data")  # Bucket name here
+
+
+    def create_indexes(self):
+        self.cyphers.create_user_fid_index()
+        self.cyphers.create_cast_index()
+        self.cyphers.create_wallet_index()
+        self.cyphers.create_channel_id_index()
+
+
+    def create_or_merge_channels(self):
+        for channel in self.scraper_data["channels"]:
+                channels_df = pd.DataFrame(channel["all_followed_channels"])
+                channels_urls = self.save_df_as_csv(channels_df, f'channels_metadata_{self.asOf}.csv')
+                self.cyphers.create_or_merge_channels(channels_urls)
+
+
+    def create_channel_followers(self):
+        """
+        Creates followers & non-nested metadata
+        """
+        for channel in self.scraper_data["channels"]:
+            print(channel.keys())
+            channelId = channel.get("channel")
+            followers_df = pd.DataFrame([{
+                'channelId': channelId,
+                'fid': str(user.get('fid')),
+                'verifiedSocials':user.get('profile', {}).get('verified_accounts', []),
+                'username': self.cyphers.sanitize_text(user.get('username', '')),
+                'display_name': self.cyphers.sanitize_text(user.get('display_name', '')),
+                'custody_address': user.get('custody_address', ''),
+                'allWallets': user.get('verified_addresses', {}).get('eth_addresses', []),
+                'bio_text': self.cyphers.sanitize_text(user.get('profile', {}).get('bio', {}).get('text', '')),
+                'power_badge': user.get('power_badge', '')
+            } for user in channel["followers"] if isinstance(user, dict)])   
+            followers_urls = self.save_df_as_csv(followers_df, f'channel_followers_{channelId}_{self.asOf}.csv')
+            self.cyphers.create_followers_set_properties(followers_urls)
+
+            """
+            Connects followers to channel
+            """
+            self.cyphers.connect_followers_to_channels(followers_urls, channelId)
+            """
+            Connects followers to custody wallets
+            """
+            followers_and_custody_wallets_df = followers_df[['fid', 'custody_address']]
+            followers_and_custody_wallets_urls = self.save_df_as_csv(followers_and_custody_wallets_df, f"followers_custody_wallets_{self.asOf}.csv")
+            self.cyphers.create_connect_custody_wallets(followers_and_custody_wallets_urls)
+
+
+
+    
+    def connect_channel_members(self):
+        for channel in self.scraper_data["channels"]:
+            channel_members = channel.get('members', [])
+            channel_id = channel.get('channel')
+            members_df = pd.DataFrame([{
+                'fid': str(member['user']['fid']),
+                'channelId': channel_id
+            } for member in channel_members if isinstance(member, dict) and 'user' in member])
+            channel_members_urls = self.save_df_as_csv(members_df, f'channel_members_{channel_id}_{self.asOf}.csv')
+            self.cyphers.connect_channel_members(channel_members_urls)
+
+    def create_connect_channel_casts(self):
+        """Create casts"""
+        for channel in self.scraper_data["channels"]:
+            channel_id = channel.get('channel')
+            channel_casts = channel.get('casts', [])
+            casts_df = pd.DataFrame(channel_casts)            
+            casts_df = pd.DataFrame([{
+                'hash': cast['hash'],
+                'channelId': channel_id,
+                'thread_hash': cast['thread_hash'],
+                'parent_hash': cast['parent_hash'],
+                'author_fid': str(cast['author']['fid']),
+                'text': self.cyphers.sanitize_text(cast['text']),
+                'timestamp': cast['timestamp'],
+                'replies_count': cast['replies']['count'],
+                'recasts_count': cast['reactions']['recasts_count'],
+                'likes_count': cast['reactions']['likes_count']
+            } for cast in channel_casts])
+            print(casts_df.head())
+        casts_urls = self.save_df_as_csv(casts_df, f"casts_{self.asOf}.csv")
+        self.cyphers.create_casts(casts_urls)
+        """
+        Connect authors
+        """
+        self.cyphers.connect_casts_authors()
+
+    def run(self):
+        self.create_indexes()
+        self.create_or_merge_channels()
+        self.create_channel_followers()
+        self.connect_channel_members()
+        self.create_connect_channel_casts()
+
+if __name__ == "__main__":
+    ingester = FarcasterIngester()
+    ingester.run()
