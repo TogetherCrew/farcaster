@@ -8,7 +8,7 @@ class FarcasterCyphers(Cypher):
 
     def create_user_fid_index(self):
         logging.info("Creating users index...")
-        query = """CREATE INDEX farcaster_user_fid_index IF NOT EXISTS FOR (u:User:Farcaster) ON (u.fid)"""
+        query = """CREATE INDEX farcaster_user_fid_index IF NOT EXISTS FOR (u:User) ON (u.fid)"""
         self.query(query)
 
     def create_cast_index(self):
@@ -18,7 +18,7 @@ class FarcasterCyphers(Cypher):
 
     def create_wallet_index(self):
         logging.info("Creating wallets index...")
-        query = """CREATE INDEX farcaster_wallet_address_index IF NOT EXISTS FOR (w:Wallet:Farcaster) ON (w.address)"""
+        query = """CREATE INDEX farcaster_wallet_address_index IF NOT EXISTS FOR (w:Wallet) ON (w.address)"""
         self.query(query)
 
     def create_channel_id_index(self):

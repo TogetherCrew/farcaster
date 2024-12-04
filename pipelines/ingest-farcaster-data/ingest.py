@@ -46,7 +46,7 @@ class FarcasterIngester(Ingestor):
                 'username': self.cyphers.sanitize_text(user.get('username', '')),
                 'display_name': self.cyphers.sanitize_text(user.get('display_name', '')),
                 'custody_address': user.get('custody_address', ''),
-                'allWallets': user.get('verified_addresses').get('eth_addresses'),
+                'allWallets': user.get('verified_addresses', {}).get('eth_addresses', []),
                 'bio_text': self.cyphers.sanitize_text(user.get('profile', {}).get('bio', {}).get('text', '')),
                 'power_badge': user.get('power_badge', '')
             } for user in channel["followers"] if isinstance(user, dict)])   
@@ -102,13 +102,13 @@ class FarcasterIngester(Ingestor):
         """
         Connect authors
         """
-        self.cyphers.connect_casts_authors()
+        # self.cyphers.connect_casts_authors()
 
     def run(self):
         self.create_indexes()
-        self.create_or_merge_channels()
-        self.create_channel_followers()
-        self.connect_channel_members()
+        # self.create_or_merge_channels()
+        # self.create_channel_followers()
+        # self.connect_channel_members()
         self.create_connect_channel_casts()
 
 if __name__ == "__main__":
