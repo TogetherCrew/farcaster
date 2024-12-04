@@ -27,11 +27,19 @@ class FetchFarcasterHubData:
         self.cutoff = os.getenv('CUTOFF')
         self.channels = json.loads(os.getenv('CHANNEL_IDS', '[]'))
         
+        # self.s3_client = boto3.client(
+        #     's3', 
+        #     region_name='us-east-1',
+        #     aws_access_key_id=self.AWS_ACCESS_KEY_ID, 
+        #     aws_secret_access_key=self.AWS_SECRET_ACCESS_KEY
+        # )
+
         self.s3_client = boto3.client(
-            's3', 
-            region_name='us-east-1',
-            aws_access_key_id=self.AWS_ACCESS_KEY_ID, 
-            aws_secret_access_key=self.AWS_SECRET_ACCESS_KEY
+            's3',
+            endpoint_url='http://localhost:9000',  # Add this line
+            aws_access_key_id=self.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=self.AWS_SECRET_ACCESS_KEY,
+            verify=False  # Add this for local development
         )
 
         logging.basicConfig(level=logging.INFO)
@@ -165,10 +173,10 @@ class FetchFarcasterHubData:
             followers = self.get_channel_followers(channel)
             channel_dict['members'] = members 
             channel_dict['followers'] = followers 
-            print("members........................")
-            print(channel_dict['members'][0:20])
-            print(f"followers.........................")
-            print(channel_dict['followers'][:20])
+            print(f"{len(channel_dict['members'])} members extracted!")
+            # print(channel_dict['members'][0:20])
+            print(f"{len(channel_dict['followers'])} followers extracted!")
+            # print(channel_dict['followers'][:20])
             # Extract fids from members and followers
             member_fids = [str(member['user']['fid']) for member in members if 'user' in member and 'fid' in member['user']]
             follower_fids = [str(follower['fid']) for follower in followers if 'fid' in follower]
@@ -177,7 +185,7 @@ class FetchFarcasterHubData:
             channel_dict['all_followed_channels'] = self.get_all_user_channels(all_fids)
             channel_dict['casts'] = channel_casts = self.get_channel_casts(channel)
             all_channel_data["channels"].append(channel_dict)
-            
+
             helpers.save_data(
                 self.s3_client,
                 self.BUCKET_NAME,
