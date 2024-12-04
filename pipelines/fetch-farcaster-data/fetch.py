@@ -19,25 +19,29 @@ class FetchFarcasterHubData:
     def __init__(self):
         self.NEYNAR_API_KEY = os.getenv("NEYNAR_API_KEY")
         self.FARCASTER_EPOCH = datetime(2021, 1, 1, tzinfo=timezone.utc)
-        self.AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+        self.AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
         self.AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
         self.BUCKET_NAME = os.getenv('BUCKET_NAME')
+
         self.data = {}
         self.runtime = datetime.now().strftime("%Y-%m-%d-%H-%M")
         self.cutoff = os.getenv('CUTOFF')
         self.channels = json.loads(os.getenv('CHANNEL_IDS', '[]'))
-        
+
+        aws_url = os.getenv("AWS_ENDOINT_URL")
+        if not aws_url:
+            raise ValueError("AWS Endpoint is not provided!")
         # self.s3_client = boto3.client(
         #     's3', 
         #     region_name='us-east-1',
-        #     aws_access_key_id=self.AWS_ACCESS_KEY_ID, 
+        #     AWS_ACCESS_KEY=self.AWS_ACCESS_KEY, 
         #     aws_secret_access_key=self.AWS_SECRET_ACCESS_KEY
         # )
 
         self.s3_client = boto3.client(
             's3',
-            endpoint_url='http://localhost:9000',  # Add this line
-            aws_access_key_id=self.AWS_ACCESS_KEY_ID,
+            endpoint_url=aws_url,  # Add this line
+            AWS_ACCESS_KEY=self.AWS_ACCESS_KEY,
             aws_secret_access_key=self.AWS_SECRET_ACCESS_KEY,
             verify=False  # Add this for local development
         )

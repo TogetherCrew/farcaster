@@ -118,16 +118,16 @@ class Ingestor:
         self.end_date = None
         
         # Initialize AWS clients
-        self.AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+        self.AWS_ACCESS_KEY = os.getenv('AWS_ACCESS_KEY')
         self.AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
         
-        if not all([self.AWS_ACCESS_KEY_ID, self.AWS_SECRET_ACCESS_KEY]):
+        if not all([self.AWS_ACCESS_KEY, self.AWS_SECRET_ACCESS_KEY]):
             raise ValueError("Missing AWS credentials in environment variables")
             
         self.s3_client = boto3.client(
             's3',
             region_name=os.getenv('AWS_DEFAULT_REGION', 'us-east-1'),
-            aws_access_key_id=self.AWS_ACCESS_KEY_ID,
+            AWS_ACCESS_KEY=self.AWS_ACCESS_KEY,
             aws_secret_access_key=self.AWS_SECRET_ACCESS_KEY
         )
         self.s3_resource = boto3.resource('s3')
