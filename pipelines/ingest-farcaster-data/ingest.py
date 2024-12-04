@@ -102,13 +102,13 @@ class FarcasterIngester(Ingestor):
         """
         Connect authors
         """
-        # self.cyphers.connect_casts_authors()
+        self.cyphers.connect_casts_authors()
 
     def run(self):
         self.create_indexes()
-        # self.create_or_merge_channels()
-        # self.create_channel_followers()
-        # self.connect_channel_members()
+        self.create_or_merge_channels()
+        self.create_channel_followers()
+        self.connect_channel_members()
         self.create_connect_channel_casts()
 
 if __name__ == "__main__":
