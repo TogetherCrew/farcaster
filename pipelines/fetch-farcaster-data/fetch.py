@@ -41,7 +41,7 @@ class FetchFarcasterHubData:
         self.s3_client = boto3.client(
             's3',
             endpoint_url=aws_url,  # Add this line
-            AWS_ACCESS_KEY=self.AWS_ACCESS_KEY,
+            aws_access_key_id=self.AWS_ACCESS_KEY,
             aws_secret_access_key=self.AWS_SECRET_ACCESS_KEY,
             verify=False  # Add this for local development
         )

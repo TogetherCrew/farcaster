@@ -15,7 +15,7 @@ class FarcasterIngester(Ingestor):
         self.cyphers = FarcasterCyphers() 
         self.asOf = datetime.now().timestamp()
         self.channels = os.getenv('CHANNEL_IDS')
-        super().__init__("tc-farcaster-data")  # Bucket name here
+        super().__init__("test")  # Bucket name here
 
 
     def create_indexes(self):
